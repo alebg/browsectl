@@ -1,0 +1,13 @@
+#!/usr/bin/env bash
+# Launch a Chrome instance with remote debugging enabled.
+# Logins persist across sessions in ~/.browsectl/chrome-profile.
+
+PROFILE_DIR="${HOME}/.browsectl/chrome-profile"
+PORT="${1:-9222}"
+
+mkdir -p "$PROFILE_DIR"
+
+exec google-chrome \
+    --remote-debugging-port="$PORT" \
+    --user-data-dir="$PROFILE_DIR" \
+    "$@"

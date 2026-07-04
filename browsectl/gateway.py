@@ -10,8 +10,10 @@ from browsectl.ports import (
     TExtractHtml,
     TListTabs,
     TNavigate,
+    TNewTab,
     TPageInfo,
     TScreenshot,
+    TSwitchTab,
     TTypeText,
 )
 
@@ -30,3 +32,5 @@ class BrowserGateway[S]:
     eval_js: TEvalJs[S]
     page_info: TPageInfo[S]
     list_tabs: TListTabs[S]
+    new_tab: TNewTab[S]
+    switch_tab: TSwitchTab[S]

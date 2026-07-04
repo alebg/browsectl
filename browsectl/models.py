@@ -57,3 +57,5 @@ class Command(StrEnum):
     EVAL = "eval"
     INFO = "info"
     TABS = "tabs"
+    NEWTAB = "newtab"
+    SWITCHTAB = "switchtab"

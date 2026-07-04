@@ -1,5 +1,6 @@
 """Tests for core command dispatch."""
 
+import json
 from unittest.mock import AsyncMock
 
 import pytest
@@ -31,26 +32,31 @@ def _make_gateway() -> BrowserGateway[str]:
         )),
         new_tab=AsyncMock(return_value=Tab(id="t2", title="", url="about:blank")),
         switch_tab=AsyncMock(),
+        scroll=AsyncMock(),
+        wait_for=AsyncMock(),
     )
 
 
 class TestDispatchConnect:
     @pytest.mark.asyncio
     async def test_saves_session(self, tmp_path, monkeypatch) -> None:  # type: ignore[no-untyped-def]
-        monkeypatch.setattr("browsectl.core.SESSION_FILE", tmp_path / "s.json")
-        monkeypatch.setattr("browsectl.core.SESSION_DIR", tmp_path)
+        monkeypatch.setattr("browsectl.core.SESSIONS_DIR", tmp_path)
         gw = _make_gateway()
         result = await dispatch(gw, Command.CONNECT, ("localhost", "9222"))
         assert "9222" in result
+        session_file = tmp_path / "default.json"
+        assert session_file.exists()
+        data = json.loads(session_file.read_text())
+        assert data["host"] == "localhost"
+        assert data["port"] == 9222
 
 
 class TestDispatchCommands:
     @pytest.fixture(autouse=True)
     def _session(self, tmp_path, monkeypatch) -> None:  # type: ignore[no-untyped-def]
-        import json
-        session_file = tmp_path / "s.json"
+        session_file = tmp_path / "default.json"
         session_file.write_text(json.dumps({"host": "localhost", "port": 9222}))
-        monkeypatch.setattr("browsectl.core.SESSION_FILE", session_file)
+        monkeypatch.setattr("browsectl.core.SESSIONS_DIR", tmp_path)
 
     @pytest.mark.asyncio
     async def test_goto(self) -> None:
@@ -103,3 +109,67 @@ class TestDispatchCommands:
         gw = _make_gateway()
         result = await dispatch(gw, Command.TABS, ())
         assert "Tab1" in result
+
+    @pytest.mark.asyncio
+    async def test_scroll(self) -> None:
+        gw = _make_gateway()
+        result = await dispatch(gw, Command.SCROLL, ("500",))
+        assert "500" in result
+        gw.scroll.assert_called_once_with("session", 500)
+
+    @pytest.mark.asyncio
+    async def test_wait(self) -> None:
+        gw = _make_gateway()
+        result = await dispatch(gw, Command.WAIT, ("#target", "5"))
+        assert "#target" in result
+        gw.wait_for.assert_called_once_with("session", "#target", 5.0)
+
+    @pytest.mark.asyncio
+    async def test_switchtab_persists_target(self, tmp_path, monkeypatch) -> None:  # type: ignore[no-untyped-def]
+        session_file = tmp_path / "default.json"
+        session_file.write_text(json.dumps({"host": "localhost", "port": 9222}))
+        monkeypatch.setattr("browsectl.core.SESSIONS_DIR", tmp_path)
+        gw = _make_gateway()
+        await dispatch(gw, Command.SWITCHTAB, ("t2",))
+        data = json.loads(session_file.read_text())
+        assert data["target_id"] == "t2"
+
+
+class TestNamedSessions:
+    @pytest.mark.asyncio
+    async def test_uses_named_session(self, tmp_path, monkeypatch) -> None:  # type: ignore[no-untyped-def]
+        monkeypatch.setattr("browsectl.core.SESSIONS_DIR", tmp_path)
+        gw = _make_gateway()
+        await dispatch(
+            gw, Command.CONNECT, ("localhost", "9222"), session_name="linkedin"
+        )
+        assert (tmp_path / "linkedin.json").exists()
+        assert not (tmp_path / "default.json").exists()
+
+    @pytest.mark.asyncio
+    async def test_loads_named_session(self, tmp_path, monkeypatch) -> None:  # type: ignore[no-untyped-def]
+        from browsectl.models import BrowserEndpoint
+        session_file = tmp_path / "work.json"
+        session_file.write_text(
+            json.dumps({"host": "remote", "port": 1234, "target_id": "t5"})
+        )
+        monkeypatch.setattr("browsectl.core.SESSIONS_DIR", tmp_path)
+        gw = _make_gateway()
+        await dispatch(gw, Command.INFO, (), session_name="work")
+        gw.connect.assert_called_once_with(
+            BrowserEndpoint(host="remote", port=1234), "t5"
+        )
+
+    @pytest.mark.asyncio
+    async def test_connect_passes_target_id(self, tmp_path, monkeypatch) -> None:  # type: ignore[no-untyped-def]
+        session_file = tmp_path / "default.json"
+        session_file.write_text(
+            json.dumps({"host": "localhost", "port": 9222, "target_id": "t3"})
+        )
+        monkeypatch.setattr("browsectl.core.SESSIONS_DIR", tmp_path)
+        gw = _make_gateway()
+        await dispatch(gw, Command.INFO, ())
+        from browsectl.models import BrowserEndpoint
+        gw.connect.assert_called_once_with(
+            BrowserEndpoint(host="localhost", port=9222), "t3"
+        )

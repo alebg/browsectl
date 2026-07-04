@@ -13,8 +13,10 @@ from browsectl.ports import (
     TNewTab,
     TPageInfo,
     TScreenshot,
+    TScroll,
     TSwitchTab,
     TTypeText,
+    TWaitFor,
 )
 
 
@@ -34,3 +36,5 @@ class BrowserGateway[S]:
     list_tabs: TListTabs[S]
     new_tab: TNewTab[S]
     switch_tab: TSwitchTab[S]
+    scroll: TScroll[S]
+    wait_for: TWaitFor[S]

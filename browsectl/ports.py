@@ -10,7 +10,7 @@ from browsectl.models import (
     Tab,
 )
 
-type TConnect[S] = Callable[[BrowserEndpoint], Awaitable[S]]
+type TConnect[S] = Callable[[BrowserEndpoint, str | None], Awaitable[S]]
 type TDisconnect[S] = Callable[[S], Awaitable[None]]
 type TNavigate[S] = Callable[[S, str], Awaitable[PageInfo]]
 type TScreenshot[S] = Callable[[S], Awaitable[Screenshot]]
@@ -22,3 +22,5 @@ type TPageInfo[S] = Callable[[S], Awaitable[PageInfo]]
 type TListTabs[S] = Callable[[S], Awaitable[tuple[Tab, ...]]]
 type TNewTab[S] = Callable[[S, str], Awaitable[Tab]]
 type TSwitchTab[S] = Callable[[S, str], Awaitable[None]]
+type TScroll[S] = Callable[[S, int], Awaitable[None]]
+type TWaitFor[S] = Callable[[S, str, float], Awaitable[None]]

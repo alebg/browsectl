@@ -59,3 +59,5 @@ class Command(StrEnum):
     TABS = "tabs"
     NEWTAB = "newtab"
     SWITCHTAB = "switchtab"
+    SCROLL = "scroll"
+    WAIT = "wait"

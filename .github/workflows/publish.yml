@@ -1,0 +1,70 @@
+name: Publish Package on Release
+
+on:
+  release:
+    types: [published]
+
+jobs:
+  build-and-publish:
+    name: Build and Publish to PyPI
+    runs-on: ubuntu-latest
+    environment: pypi
+    permissions:
+      id-token: write
+      contents: write
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.14"
+          allow-prereleases: true
+
+      - name: Install Poetry
+        run: pip install poetry
+
+      - name: Update version from release tag
+        run: poetry version ${{ github.event.release.tag_name }}
+
+      - name: Build package
+        run: poetry build
+
+      - name: Publish to PyPI
+        run: poetry publish --username __token__ --password ${{ secrets.PYPI_API_TOKEN }}
+
+      - name: Upload to GitHub Release
+        run: gh release upload ${{ github.event.release.tag_name }} dist/*
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  version-pr:
+    name: Create version bump PR
+    needs: [build-and-publish]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Poetry
+        run: pip install poetry
+
+      - name: Update version
+        run: poetry version ${{ github.event.release.tag_name }}
+
+      - name: Create PR
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          timestamp=$(date +%s)
+          branch="update-version-$timestamp"
+          git checkout -b $branch
+          git add pyproject.toml
+          git commit -m "chore: update version to ${{ github.event.release.tag_name }}"
+          git push origin $branch
+          gh pr create --title "chore: bump version to ${{ github.event.release.tag_name }}" --body "Updates pyproject.toml version after successful PyPI publish." --base main --head $branch
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}

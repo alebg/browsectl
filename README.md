@@ -67,10 +67,25 @@ browsectl html "h1"                     # extract innerHTML
 browsectl eval "document.title"         # run JavaScript
 browsectl click "#login-button"         # click by CSS selector
 browsectl type "#email" "me@example.com"
+browsectl scroll 500                    # scroll down 500px
+browsectl scroll -300                   # scroll up 300px
+browsectl wait ".results" 10            # wait for element (10s timeout)
 browsectl tabs                          # list open tabs
 browsectl newtab "https://github.com"   # open new tab
 browsectl switchtab <tab-id>            # switch to tab (ID from 'tabs')
 ```
+
+## Named sessions
+
+Run multiple independent browser sessions simultaneously:
+
+```bash
+browsectl -s linkedin connect localhost 9222
+browsectl -s linkedin goto "https://linkedin.com/feed/"
+browsectl -s research connect otherhost 9333
+```
+
+Each session stores its own endpoint and active tab in `~/.browsectl/sessions/<name>.json`. Default session name is `default`.
 
 ## Backend selection
 
@@ -94,6 +109,12 @@ browsectl/
   adapters/
     cdp.py         # Chrome DevTools Protocol implementation
 ```
+
+## Per-site guides
+
+`docs/sites/` contains navigation guides for specific websites. Each guide documents working selectors, SPA quirks, authentication patterns, and step-by-step browsectl workflows for that site. Selectors are timestamped since sites change their DOM frequently.
+
+Use `docs/sites/_template.md` as a starting point for new guides.
 
 ## Development
 

@@ -1,0 +1,31 @@
+name: CI
+
+on:
+  pull_request:
+    branches: [main]
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.14"
+          allow-prereleases: true
+
+      - name: Install dependencies
+        run: |
+          python -m venv .venv
+          .venv/bin/pip install poetry
+          .venv/bin/poetry install
+
+      - name: mypy
+        run: .venv/bin/mypy browsectl/
+
+      - name: ruff
+        run: .venv/bin/ruff check browsectl/ tests/
+
+      - name: tests
+        run: timeout 60 .venv/bin/pytest tests/ -v

@@ -39,32 +39,25 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-  version-pr:
-    name: Create version bump PR
+  version-bump:
+    name: Bump version on main
     needs: [build-and-publish]
     runs-on: ubuntu-latest
     permissions:
       contents: write
-      pull-requests: write
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: main
 
       - name: Install Poetry
         run: pip install poetry
 
-      - name: Update version
-        run: poetry version ${{ github.event.release.tag_name }}
-
-      - name: Create PR
+      - name: Update version and push
         run: |
+          poetry version ${{ github.event.release.tag_name }}
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          timestamp=$(date +%s)
-          branch="update-version-$timestamp"
-          git checkout -b $branch
           git add pyproject.toml
-          git commit -m "chore: update version to ${{ github.event.release.tag_name }}"
-          git push origin $branch
-          gh pr create --title "chore: bump version to ${{ github.event.release.tag_name }}" --body "Updates pyproject.toml version after successful PyPI publish." --base main --head $branch
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          git commit -m "chore: bump version to ${{ github.event.release.tag_name }}"
+          git push origin main

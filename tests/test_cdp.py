@@ -1,13 +1,15 @@
 """Tests for the CDP adapter."""
 
+import asyncio
 import json
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, patch
 
 import pytest
 
 from browsectl.adapters.cdp import (
     CdpError,
     CdpSession,
+    CdpTimeoutError,
     connect,
     disconnect,
     list_tabs,
@@ -85,6 +87,22 @@ class TestSendCommand:
         sent = json.loads(session.ws.send.call_args[0][0])
         assert "params" not in sent
 
+    @pytest.mark.asyncio
+    async def test_timeout_raises_cdp_timeout_error(self) -> None:
+        session = _make_session()
+
+        async def _hang() -> str:
+            await asyncio.sleep(999)
+            return ""
+
+        session.ws.recv = AsyncMock(side_effect=_hang)
+
+        with (
+            patch("browsectl.adapters.cdp.CDP_TIMEOUT", 0.05),
+            pytest.raises(CdpTimeoutError, match="timed out"),
+        ):
+            await send_command(session, "Slow.method")
+
 
 class TestConnect:
     @pytest.mark.asyncio
@@ -96,14 +114,11 @@ class TestConnect:
                 "webSocketDebuggerUrl": "ws://localhost:9222/devtools/page/ABC123",
             },
         ]
-        mock_resp = MagicMock()
-        mock_resp.read.return_value = json.dumps(targets).encode()
-        mock_resp.__enter__ = lambda s: s
-        mock_resp.__exit__ = lambda s, *a: None
 
         with (
             patch(
-                "urllib.request.urlopen", return_value=mock_resp
+                "browsectl.adapters.cdp._fetch_json",
+                return_value=json.dumps(targets).encode(),
             ),
             patch(
                 "websockets.asyncio.client.connect", new_callable=AsyncMock
@@ -119,14 +134,71 @@ class TestConnect:
             )
 
     @pytest.mark.asyncio
+    async def test_prefers_stored_target_id(self) -> None:
+        targets = [
+            {
+                "type": "page",
+                "id": "first",
+                "webSocketDebuggerUrl": "ws://localhost:9222/devtools/page/first",
+            },
+            {
+                "type": "page",
+                "id": "stored",
+                "webSocketDebuggerUrl": "ws://localhost:9222/devtools/page/stored",
+            },
+        ]
+
+        with (
+            patch(
+                "browsectl.adapters.cdp._fetch_json",
+                return_value=json.dumps(targets).encode(),
+            ),
+            patch(
+                "websockets.asyncio.client.connect", new_callable=AsyncMock
+            ) as mock_ws_connect,
+        ):
+            mock_ws_connect.return_value = AsyncMock()
+            endpoint = BrowserEndpoint(host="localhost", port=9222)
+            session = await connect(endpoint, target_id="stored")
+
+            assert session.target_id == "stored"
+            mock_ws_connect.assert_called_once_with(
+                "ws://localhost:9222/devtools/page/stored"
+            )
+
+    @pytest.mark.asyncio
+    async def test_falls_back_when_stored_target_gone(self) -> None:
+        targets = [
+            {
+                "type": "page",
+                "id": "first",
+                "webSocketDebuggerUrl": "ws://localhost:9222/devtools/page/first",
+            },
+        ]
+
+        with (
+            patch(
+                "browsectl.adapters.cdp._fetch_json",
+                return_value=json.dumps(targets).encode(),
+            ),
+            patch(
+                "websockets.asyncio.client.connect", new_callable=AsyncMock
+            ) as mock_ws_connect,
+        ):
+            mock_ws_connect.return_value = AsyncMock()
+            endpoint = BrowserEndpoint(host="localhost", port=9222)
+            session = await connect(endpoint, target_id="gone")
+
+            assert session.target_id == "first"
+
+    @pytest.mark.asyncio
     async def test_raises_when_no_page_targets(self) -> None:
         targets = [{"type": "service_worker", "id": "sw1"}]
-        mock_resp = MagicMock()
-        mock_resp.read.return_value = json.dumps(targets).encode()
-        mock_resp.__enter__ = lambda s: s
-        mock_resp.__exit__ = lambda s, *a: None
 
-        with patch("urllib.request.urlopen", return_value=mock_resp):
+        with patch(
+            "browsectl.adapters.cdp._fetch_json",
+            return_value=json.dumps(targets).encode(),
+        ):
             endpoint = BrowserEndpoint(host="localhost", port=9222)
             with pytest.raises(CdpError, match="No page targets"):
                 await connect(endpoint)
@@ -206,6 +278,16 @@ class TestPageInfo:
 
         info = await page_info(session)
         assert info == PageInfo(url="https://example.com/page", title="Example Page")
+
+    @pytest.mark.asyncio
+    async def test_raises_on_unexpected_structure(self) -> None:
+        session = _make_session()
+        session.ws.recv = AsyncMock(
+            return_value=json.dumps({"id": 1, "result": {}})
+        )
+
+        with pytest.raises(CdpError, match="unexpected response"):
+            await page_info(session)
 
 
 class TestDisconnect:

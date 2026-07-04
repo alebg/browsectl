@@ -1,7 +1,9 @@
 """Chrome DevTools Protocol adapter."""
 
+import asyncio
 import base64
 import json
+import urllib.request
 from collections.abc import Awaitable, Callable
 
 import attrs
@@ -14,6 +16,16 @@ from browsectl.models import (
     Screenshot,
     Tab,
 )
+
+CDP_TIMEOUT: float = 30.0
+
+
+class CdpError(Exception):
+    """Raised when a CDP command returns an error."""
+
+
+class CdpTimeoutError(CdpError):
+    """Raised when a CDP operation exceeds its timeout."""
 
 
 @attrs.define(slots=True)
@@ -30,6 +42,12 @@ class CdpSession:
         return self._msg_id
 
 
+def _fetch_json(url: str) -> bytes:
+    """Blocking HTTP GET — run via asyncio.to_thread."""
+    with urllib.request.urlopen(url) as resp:
+        return resp.read()  # type: ignore[no-any-return]
+
+
 async def _send_command(
     session: CdpSession,
     method: str,
@@ -42,25 +60,29 @@ async def _send_command(
         payload["params"] = params
     await session.ws.send(json.dumps(payload))
 
-    while True:
-        raw = await session.ws.recv()
-        response = json.loads(raw)
-        if isinstance(response, dict) and response.get("id") == msg_id:
-            if "error" in response:
-                error = response["error"]
-                if isinstance(error, dict):
-                    msg = error.get("message", str(error))
-                else:
-                    msg = str(error)
-                raise CdpError(msg)
-            result = response.get("result")
-            if isinstance(result, dict):
-                return result
-            return {}
+    async def _recv_response() -> dict[str, object]:
+        while True:
+            raw = await session.ws.recv()
+            response = json.loads(raw)
+            if isinstance(response, dict) and response.get("id") == msg_id:
+                if "error" in response:
+                    error = response["error"]
+                    if isinstance(error, dict):
+                        msg = error.get("message", str(error))
+                    else:
+                        msg = str(error)
+                    raise CdpError(msg)
+                result = response.get("result")
+                if isinstance(result, dict):
+                    return result
+                return {}
 
-
-class CdpError(Exception):
-    """Raised when a CDP command returns an error."""
+    try:
+        return await asyncio.wait_for(_recv_response(), timeout=CDP_TIMEOUT)
+    except TimeoutError:
+        raise CdpTimeoutError(
+            f"CDP command {method} timed out after {CDP_TIMEOUT}s"
+        )
 
 
 type TSendCommand = Callable[
@@ -70,24 +92,32 @@ type TSendCommand = Callable[
 send_command: TSendCommand = _send_command
 
 
-async def connect(endpoint: BrowserEndpoint) -> CdpSession:
-    """Connect to the first available CDP target."""
-    import urllib.request
-
+async def connect(
+    endpoint: BrowserEndpoint, target_id: str | None = None
+) -> CdpSession:
+    """Connect to a CDP target, preferring target_id if it still exists."""
     list_url = f"http://{endpoint.host}:{endpoint.port}/json"
-    with urllib.request.urlopen(list_url) as resp:
-        targets = json.loads(resp.read().decode())
+    raw = await asyncio.to_thread(_fetch_json, list_url)
+    targets = json.loads(raw.decode())
 
     page_targets = [t for t in targets if t.get("type") == "page"]
     if not page_targets:
         raise CdpError("No page targets found")
 
-    target = page_targets[0]
-    ws_url = target["webSocketDebuggerUrl"]
-    target_id = target["id"]
+    target = None
+    if target_id is not None:
+        target = next(
+            (t for t in page_targets if t.get("id") == target_id),
+            None,
+        )
+    if target is None:
+        target = page_targets[0]
+
+    ws_url: str = target["webSocketDebuggerUrl"]
+    tid: str = target["id"]
 
     ws = await websockets.asyncio.client.connect(ws_url)
-    return CdpSession(ws=ws, target_id=target_id, endpoint=endpoint)
+    return CdpSession(ws=ws, target_id=tid, endpoint=endpoint)
 
 
 async def disconnect(session: CdpSession) -> None:
@@ -119,13 +149,12 @@ async def page_info(session: CdpSession) -> PageInfo:
         "Runtime.evaluate",
         {"expression": "JSON.stringify({url: location.href, title: document.title})"},
     )
-    raw_value = result.get("result", {})
-    if isinstance(raw_value, dict):
-        value_str = raw_value.get("value", "{}")
-    else:
-        value_str = "{}"
+    raw_value = result.get("result")
+    if not isinstance(raw_value, dict):
+        raise CdpError("page_info: unexpected response structure")
+    value_str = raw_value.get("value")
     if not isinstance(value_str, str):
-        value_str = "{}"
+        raise CdpError("page_info: missing result value")
     parsed = json.loads(value_str)
     return PageInfo(
         url=parsed.get("url", ""),
@@ -138,12 +167,17 @@ async def navigate(session: CdpSession, url: str) -> PageInfo:
     await send_command(session, "Page.enable", None)
     await send_command(session, "Page.navigate", {"url": url})
 
-    # Wait for Page.loadEventFired
-    while True:
-        raw = await session.ws.recv()
-        msg = json.loads(raw)
-        if isinstance(msg, dict) and msg.get("method") == "Page.loadEventFired":
-            break
+    async def _wait_for_load() -> None:
+        while True:
+            raw = await session.ws.recv()
+            msg = json.loads(raw)
+            if isinstance(msg, dict) and msg.get("method") == "Page.loadEventFired":
+                break
+
+    try:
+        await asyncio.wait_for(_wait_for_load(), timeout=CDP_TIMEOUT)
+    except TimeoutError:
+        raise CdpTimeoutError(f"Page load timed out after {CDP_TIMEOUT}s")
 
     return await page_info(session)
 
@@ -155,9 +189,9 @@ async def screenshot(session: CdpSession) -> Screenshot:
         "Page.captureScreenshot",
         {"format": "png"},
     )
-    data_str = result.get("data", "")
-    if not isinstance(data_str, str):
-        data_str = ""
+    data_str = result.get("data")
+    if not isinstance(data_str, str) or not data_str:
+        raise CdpError("screenshot: no image data in response")
     return Screenshot(data=base64.b64decode(data_str), format="png")
 
 
@@ -167,6 +201,7 @@ async def click(session: CdpSession, selector: str) -> None:
     (() => {{
         const el = document.querySelector({json.dumps(selector)});
         if (!el) throw new Error("Element not found: " + {json.dumps(selector)});
+        el.scrollIntoView({{block: 'center'}});
         const rect = el.getBoundingClientRect();
         return JSON.stringify({{
             x: rect.x + rect.width / 2,
@@ -188,12 +223,11 @@ async def click(session: CdpSession, selector: str) -> None:
                 raise CdpError(str(exc.get("description", "click failed")))
         raise CdpError("click failed")
 
-    if isinstance(raw_result, dict):
-        value_str = raw_result.get("value", "{}")
-    else:
-        value_str = "{}"
+    if not isinstance(raw_result, dict):
+        raise CdpError("click: unexpected response structure")
+    value_str = raw_result.get("value")
     if not isinstance(value_str, str):
-        value_str = "{}"
+        raise CdpError("click: missing coordinate data")
     coords = json.loads(value_str)
     x = float(coords.get("x", 0))
     y = float(coords.get("y", 0))
@@ -258,12 +292,13 @@ async def extract_html(session: CdpSession, selector: str) -> str:
     )
     if "exceptionDetails" in result:
         raise CdpError(f"Element not found: {selector}")
-    raw_result = result.get("result", {})
-    if isinstance(raw_result, dict):
-        value = raw_result.get("value", "")
-        if isinstance(value, str):
-            return value
-    return ""
+    raw_result = result.get("result")
+    if not isinstance(raw_result, dict):
+        raise CdpError("extract_html: unexpected response structure")
+    value = raw_result.get("value")
+    if not isinstance(value, str):
+        raise CdpError("extract_html: no string value in result")
+    return value
 
 
 async def eval_js(session: CdpSession, expression: str) -> EvalResult:
@@ -280,11 +315,10 @@ async def eval_js(session: CdpSession, expression: str) -> EvalResult:
             if isinstance(exc, dict):
                 raise CdpError(str(exc.get("description", "eval failed")))
         raise CdpError("eval failed")
-    raw_result = result.get("result", {})
-    if isinstance(raw_result, dict):
-        value = raw_result.get("value", "")
-        return EvalResult(value=str(value))
-    return EvalResult(value="")
+    raw_result = result.get("result")
+    if not isinstance(raw_result, dict):
+        raise CdpError("eval_js: unexpected response structure")
+    return EvalResult(value=str(raw_result.get("value", "")))
 
 
 async def new_tab(session: CdpSession, url: str) -> Tab:
@@ -302,12 +336,10 @@ async def new_tab(session: CdpSession, url: str) -> Tab:
 
 async def switch_tab(session: CdpSession, target_id: str) -> None:
     """Switch to a different tab by reconnecting to its websocket."""
-    import urllib.request
-
     ep = session.endpoint
     list_url = f"http://{ep.host}:{ep.port}/json"
-    with urllib.request.urlopen(list_url) as resp:
-        targets = json.loads(resp.read().decode())
+    raw = await asyncio.to_thread(_fetch_json, list_url)
+    targets = json.loads(raw.decode())
 
     target = next(
         (t for t in targets if t.get("id") == target_id),
@@ -316,7 +348,41 @@ async def switch_tab(session: CdpSession, target_id: str) -> None:
     if target is None:
         raise CdpError(f"Tab not found: {target_id}")
 
+    ws_url: str = target["webSocketDebuggerUrl"]
+    new_ws = await websockets.asyncio.client.connect(ws_url)
     await session.ws.close()
-    ws_url = target["webSocketDebuggerUrl"]
-    session.ws = await websockets.asyncio.client.connect(ws_url)
+    session.ws = new_ws
     session.target_id = target_id
+
+
+async def scroll(session: CdpSession, pixels: int) -> None:
+    """Scroll the page by N pixels (positive=down, negative=up)."""
+    await send_command(
+        session,
+        "Runtime.evaluate",
+        {"expression": f"window.scrollBy(0, {pixels})"},
+    )
+
+
+async def wait_for(session: CdpSession, selector: str, timeout: float = 30.0) -> None:
+    """Poll for a CSS selector until it exists or timeout."""
+    js = f"document.querySelector({json.dumps(selector)}) !== null"
+
+    async def _poll() -> None:
+        while True:
+            result = await send_command(
+                session,
+                "Runtime.evaluate",
+                {"expression": js, "returnByValue": True},
+            )
+            raw = result.get("result")
+            if isinstance(raw, dict) and raw.get("value") is True:
+                return
+            await asyncio.sleep(0.1)
+
+    try:
+        await asyncio.wait_for(_poll(), timeout=timeout)
+    except TimeoutError:
+        raise CdpTimeoutError(
+            f"Selector {selector!r} not found after {timeout}s"
+        )

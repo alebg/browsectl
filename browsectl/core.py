@@ -9,48 +9,65 @@ from browsectl.models import BrowserEndpoint, Command
 
 logger = logging.getLogger(__name__)
 
-SESSION_DIR = Path.home() / ".browsectl"
-SESSION_FILE = SESSION_DIR / "session.json"
+SESSIONS_DIR = Path.home() / ".browsectl" / "sessions"
 SCREENSHOT_PATH = Path("screenshot.png")
 
 
-def load_endpoint() -> BrowserEndpoint:
-    """Load the saved browser endpoint from the session file."""
-    if not SESSION_FILE.exists():
+def _session_file(name: str) -> Path:
+    return SESSIONS_DIR / f"{name}.json"
+
+
+def load_session(name: str = "default") -> tuple[BrowserEndpoint, str | None]:
+    """Load the saved browser endpoint and target from the session file."""
+    path = _session_file(name)
+    if not path.exists():
         raise SystemExit(
             "No active session. Run: browsectl connect <host> <port>"
         )
-    data = json.loads(SESSION_FILE.read_text())
-    return BrowserEndpoint(host=data["host"], port=data["port"])
-
-
-def save_endpoint(endpoint: BrowserEndpoint) -> None:
-    """Save the browser endpoint to the session file."""
-    SESSION_DIR.mkdir(parents=True, exist_ok=True)
-    SESSION_FILE.write_text(
-        json.dumps({"host": endpoint.host, "port": endpoint.port})
+    data = json.loads(path.read_text())
+    target_id = data.get("target_id")
+    return (
+        BrowserEndpoint(host=data["host"], port=data["port"]),
+        target_id if isinstance(target_id, str) else None,
     )
+
+
+def save_session(
+    endpoint: BrowserEndpoint,
+    target_id: str | None = None,
+    name: str = "default",
+) -> None:
+    """Save the browser endpoint and optional target to the session file."""
+    SESSIONS_DIR.mkdir(parents=True, exist_ok=True)
+    data: dict[str, object] = {"host": endpoint.host, "port": endpoint.port}
+    if target_id is not None:
+        data["target_id"] = target_id
+    _session_file(name).write_text(json.dumps(data))
 
 
 async def dispatch[S](
     gateway: BrowserGateway[S],
     command: Command,
     args: tuple[str, ...],
+    session_name: str = "default",
 ) -> str:
     """Dispatch a CLI command through the gateway. Returns output text."""
     if command == Command.CONNECT:
         host = args[0] if args else "localhost"
         port = int(args[1]) if len(args) > 1 else 9222
         endpoint = BrowserEndpoint(host=host, port=port)
-        session = await gateway.connect(endpoint)
+        session = await gateway.connect(endpoint, None)
         await gateway.disconnect(session)
-        save_endpoint(endpoint)
+        save_session(endpoint, name=session_name)
         return f"Connected to {host}:{port}"
 
-    endpoint = load_endpoint()
-    session = await gateway.connect(endpoint)
+    endpoint, target_id = load_session(session_name)
+    session = await gateway.connect(endpoint, target_id)
     try:
-        return await _run_command(gateway, session, command, args)
+        result = await _run_command(gateway, session, command, args)
+        if command == Command.SWITCHTAB and args:
+            save_session(endpoint, target_id=args[0], name=session_name)
+        return result
     finally:
         await gateway.disconnect(session)
 
@@ -118,6 +135,19 @@ async def _run_command[S](
             await gateway.switch_tab(session, args[0])
             info = await gateway.page_info(session)
             return f"Switched to: {info.title}\n{info.url}"
+
+        case Command.SCROLL:
+            if not args:
+                raise SystemExit("Usage: browsectl scroll <pixels>")
+            await gateway.scroll(session, int(args[0]))
+            return f"Scrolled {args[0]}px"
+
+        case Command.WAIT:
+            if not args:
+                raise SystemExit("Usage: browsectl wait <selector> [timeout]")
+            timeout = float(args[1]) if len(args) > 1 else 30.0
+            await gateway.wait_for(session, args[0], timeout)
+            return f"Found: {args[0]}"
 
         case Command.CONNECT:
             return ""

@@ -1,7 +1,7 @@
 """Tests for CDP newtab and switchtab operations."""
 
 import json
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, patch
 
 import pytest
 
@@ -55,14 +55,13 @@ class TestSwitchTab:
                 "webSocketDebuggerUrl": "ws://localhost:9222/devtools/page/t2",
             },
         ]
-        mock_resp = MagicMock()
-        mock_resp.read.return_value = json.dumps(targets).encode()
-        mock_resp.__enter__ = lambda s: s
-        mock_resp.__exit__ = lambda s, *a: None
 
         new_ws = AsyncMock()
         with (
-            patch("urllib.request.urlopen", return_value=mock_resp),
+            patch(
+                "browsectl.adapters.cdp._fetch_json",
+                return_value=json.dumps(targets).encode(),
+            ),
             patch(
                 "websockets.asyncio.client.connect",
                 new_callable=AsyncMock,
@@ -76,13 +75,50 @@ class TestSwitchTab:
         assert session.ws is new_ws
 
     @pytest.mark.asyncio
+    async def test_connects_new_before_closing_old(self) -> None:
+        """Verify new ws is connected before old ws is closed."""
+        session = _make_session()
+        old_ws = session.ws
+        call_order: list[str] = []
+
+        new_ws = AsyncMock()
+        old_ws.close = AsyncMock(
+            side_effect=lambda: call_order.append("close_old")
+        )
+
+        async def fake_connect(url: str) -> AsyncMock:
+            call_order.append("connect_new")
+            return new_ws
+
+        targets = [
+            {
+                "id": "t2",
+                "type": "page",
+                "webSocketDebuggerUrl": "ws://localhost:9222/devtools/page/t2",
+            },
+        ]
+
+        with (
+            patch(
+                "browsectl.adapters.cdp._fetch_json",
+                return_value=json.dumps(targets).encode(),
+            ),
+            patch(
+                "websockets.asyncio.client.connect",
+                side_effect=fake_connect,
+            ),
+        ):
+            await switch_tab(session, "t2")
+
+        assert call_order == ["connect_new", "close_old"]
+
+    @pytest.mark.asyncio
     async def test_raises_on_unknown_tab(self) -> None:
         session = _make_session()
-        mock_resp = MagicMock()
-        mock_resp.read.return_value = json.dumps([]).encode()
-        mock_resp.__enter__ = lambda s: s
-        mock_resp.__exit__ = lambda s, *a: None
 
-        with patch("urllib.request.urlopen", return_value=mock_resp):
+        with patch(
+            "browsectl.adapters.cdp._fetch_json",
+            return_value=json.dumps([]).encode(),
+        ):
             with pytest.raises(CdpError, match="Tab not found"):
                 await switch_tab(session, "nonexistent")

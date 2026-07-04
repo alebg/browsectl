@@ -214,15 +214,15 @@ async def click(session: CdpSession, selector: str) -> None:
         "Runtime.evaluate",
         {"expression": js, "returnByValue": True},
     )
-    raw_result = result.get("result", {})
-    if isinstance(raw_result, dict) and "exceptionDetails" in result:
-        desc = result.get("exceptionDetails", {})
+    if "exceptionDetails" in result:
+        desc = result.get("exceptionDetails")
         if isinstance(desc, dict):
-            exc = desc.get("exception", {})
+            exc = desc.get("exception")
             if isinstance(exc, dict):
                 raise CdpError(str(exc.get("description", "click failed")))
         raise CdpError("click failed")
 
+    raw_result = result.get("result")
     if not isinstance(raw_result, dict):
         raise CdpError("click: unexpected response structure")
     value_str = raw_result.get("value")
@@ -338,13 +338,19 @@ async def switch_tab(session: CdpSession, target_id: str) -> None:
     """Switch to a different tab by reconnecting to its websocket."""
     ep = session.endpoint
     list_url = f"http://{ep.host}:{ep.port}/json"
-    raw = await asyncio.to_thread(_fetch_json, list_url)
-    targets = json.loads(raw.decode())
 
-    target = next(
-        (t for t in targets if t.get("id") == target_id),
-        None,
-    )
+    target = None
+    for _ in range(10):
+        raw = await asyncio.to_thread(_fetch_json, list_url)
+        targets = json.loads(raw.decode())
+        target = next(
+            (t for t in targets if t.get("id") == target_id),
+            None,
+        )
+        if target is not None:
+            break
+        await asyncio.sleep(0.2)
+
     if target is None:
         raise CdpError(f"Tab not found: {target_id}")
 

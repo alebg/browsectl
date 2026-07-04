@@ -1,5 +1,6 @@
 """Command orchestration -- browser-agnostic business logic."""
 
+import fcntl
 import json
 import logging
 from pathlib import Path
@@ -42,7 +43,10 @@ def save_session(
     data: dict[str, object] = {"host": endpoint.host, "port": endpoint.port}
     if target_id is not None:
         data["target_id"] = target_id
-    _session_file(name).write_text(json.dumps(data))
+    path = _session_file(name)
+    with path.open("w") as f:
+        fcntl.flock(f, fcntl.LOCK_EX)
+        f.write(json.dumps(data))
 
 
 async def dispatch[S](

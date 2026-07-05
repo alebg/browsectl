@@ -43,12 +43,11 @@ jobs:
     name: Bump version on main
     needs: [build-and-publish]
     runs-on: ubuntu-latest
-    permissions:
-      contents: write
     steps:
       - uses: actions/checkout@v4
         with:
           ref: main
+          token: ${{ secrets.GH_PAT }}
 
       - name: Install Poetry
         run: pip install poetry

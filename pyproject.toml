@@ -2,6 +2,7 @@
 name = "browsectl"
 version = "0.2.0"
 description = "Browser-agnostic automation for AI agents"
+readme = "README.md"
 authors = [
     {name = "Luis Bordo"},
 ]
@@ -10,6 +11,11 @@ dependencies = [
     "websockets>=15.0",
     "attrs (>=26.1.0,<27.0.0)",
 ]
+
+[project.urls]
+Homepage = "https://github.com/alebg/browsectl"
+Repository = "https://github.com/alebg/browsectl"
+"Bug Tracker" = "https://github.com/alebg/browsectl/issues"
 
 [project.scripts]
 browsectl = "browsectl.main:main"

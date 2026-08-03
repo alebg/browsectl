@@ -413,6 +413,25 @@ class TestStopSession:
         assert "no associated process" in result
         assert not session_file.exists()
 
+    def test_stop_does_not_affect_other_sessions(self, tmp_path, monkeypatch) -> None:  # type: ignore[no-untyped-def]
+        monkeypatch.setattr("browsectl.core.SESSIONS_DIR", tmp_path)
+        agent1_file = tmp_path / "agent1.json"
+        agent2_file = tmp_path / "agent2.json"
+        agent1_file.write_text(
+            json.dumps({"host": "localhost", "port": 9333, "pid": 99999999})
+        )
+        agent2_file.write_text(
+            json.dumps({"host": "localhost", "port": 9444, "pid": 88888888})
+        )
+
+        stop_session("agent1")
+
+        assert not agent1_file.exists()
+        assert agent2_file.exists()
+        data = json.loads(agent2_file.read_text())
+        assert data["pid"] == 88888888
+        assert data["port"] == 9444
+
     def test_no_session_fails(self, tmp_path, monkeypatch) -> None:  # type: ignore[no-untyped-def]
         monkeypatch.setattr("browsectl.core.SESSIONS_DIR", tmp_path)
         with pytest.raises(SystemExit, match="No session"):

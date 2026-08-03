@@ -23,6 +23,7 @@ Commands:
   stop                    Stop a launched Chrome session
   stop-all                Stop all sessions and kill their processes
   sessions [--prune]      List all saved sessions (--prune removes stale ones)
+  profiles [--prune]      List all profile directories (--prune removes orphaned ones)
   connect <host> <port>   Connect to an existing browser at host:port
   goto <url>              Navigate to URL
   screenshot [path]       Save screenshot (default: screenshot.png)
@@ -107,7 +108,7 @@ def _parse_args(
         print(USAGE, file=sys.stderr)
         raise SystemExit(1)
 
-    no_session_commands = {Command.SESSIONS, Command.STOP_ALL}
+    no_session_commands = {Command.SESSIONS, Command.STOP_ALL, Command.PROFILES}
     if session_name is None and command not in no_session_commands:
         raise SystemExit(
             "Missing required option: -s <session>\n"

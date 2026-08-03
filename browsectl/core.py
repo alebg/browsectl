@@ -5,17 +5,16 @@ import fcntl
 import json
 import logging
 import os
+import shutil
 import signal
 import socket
 import time
 from pathlib import Path
 
 from browsectl.gateway import BrowserGateway
-from browsectl.models import BrowserEndpoint, Command
+from browsectl.models import PROFILES_DIR, SESSIONS_DIR, BrowserEndpoint, Command
 
 logger = logging.getLogger(__name__)
-
-SESSIONS_DIR = Path.home() / ".browsectl" / "sessions"
 SCREENSHOT_PATH = Path("screenshot.png")
 DEFAULT_HOST: str = "localhost"
 LAUNCH_TIMEOUT: float = 15.0
@@ -161,6 +160,47 @@ def stop_all_sessions() -> str:
     return "\n".join(results)
 
 
+def _active_session_names() -> frozenset[str]:
+    """Return the set of session names that have a session file."""
+    if not SESSIONS_DIR.exists():
+        return frozenset()
+    return frozenset(f.stem for f in SESSIONS_DIR.glob("*.json"))
+
+
+def list_profiles(*, prune: bool = False) -> str:
+    """List all profile directories. Optionally prune orphaned ones."""
+    if not PROFILES_DIR.exists():
+        return "(no profiles)"
+    dirs = sorted(
+        d for d in PROFILES_DIR.iterdir() if d.is_dir()
+    )
+    if not dirs:
+        return "(no profiles)"
+    active = _active_session_names()
+    lines: list[str] = []
+    pruned: list[str] = []
+    for d in dirs:
+        name = d.name
+        has_session = name in active
+        status = "active" if has_session else "orphaned"
+        if prune and not has_session:
+            shutil.rmtree(d)
+            pruned.append(name)
+        else:
+            lines.append(f"{name}  {status}")
+    parts: list[str] = []
+    if lines:
+        parts.append("\n".join(lines))
+    if pruned:
+        parts.append(
+            f"Pruned {len(pruned)} orphaned profile(s): "
+            f"{', '.join(pruned)}"
+        )
+    if not parts:
+        return "(no profiles)"
+    return "\n".join(parts)
+
+
 def _find_free_port(host: str) -> int:
     """Ask the OS for a free ephemeral port."""
     sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -281,6 +321,10 @@ async def dispatch[S](
     if command == Command.STOP_ALL:
         return stop_all_sessions()
 
+    if command == Command.PROFILES:
+        prune = "--prune" in args
+        return list_profiles(prune=prune)
+
     if command == Command.CONNECT:
         missing: list[str] = []
         if not args:
@@ -398,5 +442,6 @@ async def _run_command[S](
             | Command.STOP
             | Command.SESSIONS
             | Command.STOP_ALL
+            | Command.PROFILES
         ):
             return ""

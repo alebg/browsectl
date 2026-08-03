@@ -1,8 +1,13 @@
 """Domain types for browsectl."""
 
 from enum import StrEnum
+from pathlib import Path
 
 import attrs
+
+BROWSECTL_DIR = Path.home() / ".browsectl"
+SESSIONS_DIR = BROWSECTL_DIR / "sessions"
+PROFILES_DIR = BROWSECTL_DIR / "profiles"
 
 
 @attrs.define(frozen=True, slots=True)
@@ -66,3 +71,4 @@ class Command(StrEnum):
     STOP = "stop"
     SESSIONS = "sessions"
     STOP_ALL = "stop-all"
+    PROFILES = "profiles"

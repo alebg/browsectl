@@ -6,12 +6,12 @@ import json
 import subprocess
 import urllib.request
 from collections.abc import Awaitable, Callable
-from pathlib import Path
 
 import attrs
 import websockets.asyncio.client
 
 from browsectl.models import (
+    PROFILES_DIR,
     BrowserEndpoint,
     EvalResult,
     PageInfo,
@@ -21,7 +21,6 @@ from browsectl.models import (
 
 CDP_TIMEOUT: float = 30.0
 WS_MAX_SIZE: int = 16 * 1024 * 1024
-PROFILES_DIR: Path = Path.home() / ".browsectl" / "profiles"
 
 
 class CdpError(Exception):

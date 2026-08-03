@@ -1,6 +1,6 @@
 [project]
 name = "browsectl"
-version = "0.1.3"
+version = "0.2.0"
 description = "Browser-agnostic automation for AI agents"
 authors = [
     {name = "Luis Bordo"},

@@ -80,6 +80,38 @@ def stop_session(name: str) -> str:
     return f"Stopped session '{name}' (pid {pid})."
 
 
+def list_sessions() -> str:
+    """List all saved sessions with their status."""
+    if not SESSIONS_DIR.exists():
+        return "(no sessions)"
+    files = sorted(SESSIONS_DIR.glob("*.json"))
+    if not files:
+        return "(no sessions)"
+    lines: list[str] = []
+    for f in files:
+        name = f.stem
+        try:
+            data = json.loads(f.read_text())
+        except (json.JSONDecodeError, OSError):
+            lines.append(f"{name}  (corrupt session file)")
+            continue
+        host = data.get("host", "?")
+        port = data.get("port", "?")
+        pid = data.get("pid")
+        alive = False
+        if isinstance(pid, int):
+            try:
+                os.kill(pid, 0)
+                alive = True
+            except ProcessLookupError:
+                pass
+            except PermissionError:
+                alive = True
+        status = "running" if alive else "dead" if isinstance(pid, int) else "external"
+        lines.append(f"{name}  {host}:{port}  pid={pid}  {status}")
+    return "\n".join(lines)
+
+
 def _find_free_port(host: str) -> int:
     """Ask the OS for a free ephemeral port."""
     sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -182,6 +214,9 @@ async def dispatch[S](
 
     if command == Command.STOP:
         return stop_session(session_name)
+
+    if command == Command.SESSIONS:
+        return list_sessions()
 
     if command == Command.CONNECT:
         missing: list[str] = []
@@ -294,5 +329,5 @@ async def _run_command[S](
             await gateway.clear_cookies(session)
             return "Cookies cleared"
 
-        case Command.CONNECT | Command.LAUNCH | Command.STOP:
+        case Command.CONNECT | Command.LAUNCH | Command.STOP | Command.SESSIONS:
             return ""

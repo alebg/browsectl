@@ -1,5 +1,6 @@
 """Function signature contracts for browser operations."""
 
+import subprocess
 from collections.abc import Awaitable, Callable
 
 from browsectl.models import (
@@ -25,3 +26,4 @@ type TSwitchTab[S] = Callable[[S, str], Awaitable[None]]
 type TScroll[S] = Callable[[S, int], Awaitable[None]]
 type TWaitFor[S] = Callable[[S, str, float], Awaitable[None]]
 type TClearCookies[S] = Callable[[S], Awaitable[None]]
+type TLaunchBrowser = Callable[[str, int], subprocess.Popen[bytes]]

@@ -9,6 +9,7 @@ from browsectl.ports import (
     TDisconnect,
     TEvalJs,
     TExtractHtml,
+    TLaunchBrowser,
     TListTabs,
     TNavigate,
     TNewTab,
@@ -40,3 +41,4 @@ class BrowserGateway[S]:
     scroll: TScroll[S]
     wait_for: TWaitFor[S]
     clear_cookies: TClearCookies[S]
+    launch_browser: TLaunchBrowser

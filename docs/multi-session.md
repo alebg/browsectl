@@ -74,12 +74,35 @@ browsectl-chrome myprofile 9500
 
 Both profile name and port are required. Profiles are stored at `~/.browsectl/profiles/<name>/`.
 
-## Cleanup
-
-Kill Chrome instances by session name:
+## Listing sessions
 
 ```bash
-pkill -f "user-data-dir=.*profiles/agent1"
+browsectl sessions
 ```
+
+Shows every saved session with its name, host:port, PID, and status:
+- **running**: the Chrome process is alive
+- **dead**: the process has exited but the session file remains
+- **external**: connected via `connect` (no PID tracked)
+
+No `-s` flag required.
+
+## Stopping sessions
+
+```bash
+browsectl -s agent1 stop
+```
+
+Sends SIGTERM to the Chrome process and removes the session file. Other sessions are unaffected.
+
+## Launch timeout
+
+The `launch` command waits up to 15 seconds for Chrome's CDP endpoint to become ready. Override with `--timeout`:
+
+```bash
+browsectl -s agent1 launch --timeout 30
+```
+
+## Cleanup
 
 Profile directories persist at `~/.browsectl/profiles/<name>/` so logins survive across runs. Remove them manually if no longer needed.

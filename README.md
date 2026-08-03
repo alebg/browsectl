@@ -43,6 +43,12 @@ browsectl -s myagent launch 9500
 
 If the explicit port is already in use, `launch` fails immediately with a clear error.
 
+For slow-starting environments, override the CDP readiness timeout (default 15s):
+
+```bash
+browsectl -s myagent launch --timeout 30
+```
+
 ### 2. Use it
 
 Every command requires `-s <session>`:
@@ -65,6 +71,15 @@ browsectl -s myagent switchtab <tab-id>            # switch to tab (ID from 'tab
 browsectl -s myagent clear-cookies                 # clear all browser cookies
 ```
 
+### 3. Manage sessions
+
+```bash
+browsectl sessions                    # list all sessions and their status
+browsectl -s myagent stop             # kill Chrome and remove the session
+```
+
+`sessions` shows each session's name, host:port, PID, and whether the process is running, dead, or external (connected manually, no PID tracked).
+
 ### Connecting to an existing browser
 
 If Chrome is already running with `--remote-debugging-port`, use `connect` instead of `launch`:
@@ -86,7 +101,7 @@ browsectl -s agent1 goto "https://example.com"
 browsectl -s agent2 goto "https://github.com"
 ```
 
-Each session gets its own Chrome process, profile directory, cookies, and localStorage. Ports are auto-assigned so agents never clash. See `docs/multi-session.md` for details.
+Each session gets its own Chrome process, profile directory, cookies, and localStorage. Ports are auto-assigned so agents never clash. Use `browsectl sessions` to see all active sessions, and `browsectl -s <name> stop` to shut one down. See `docs/multi-session.md` for details.
 
 ## Standalone Chrome launcher
 

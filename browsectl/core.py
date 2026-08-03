@@ -141,9 +141,10 @@ def _check_port_free(host: str, port: int) -> None:
 async def _wait_for_cdp[S](
     gateway: BrowserGateway[S],
     endpoint: BrowserEndpoint,
+    timeout: float = LAUNCH_TIMEOUT,
 ) -> None:
     """Poll until Chrome's CDP endpoint is reachable."""
-    deadline = time.monotonic() + LAUNCH_TIMEOUT
+    deadline = time.monotonic() + timeout
     last_error: Exception | None = None
     while time.monotonic() < deadline:
         try:
@@ -153,7 +154,7 @@ async def _wait_for_cdp[S](
         except Exception as exc:
             last_error = exc
             await asyncio.sleep(LAUNCH_POLL_INTERVAL)
-    msg = f"Chrome did not become ready within {LAUNCH_TIMEOUT}s"
+    msg = f"Chrome did not become ready within {timeout}s"
     if last_error is not None:
         msg += f": {last_error}"
     raise SystemExit(msg)
@@ -161,10 +162,11 @@ async def _wait_for_cdp[S](
 
 def _parse_launch_args(
     args: tuple[str, ...],
-) -> tuple[int | None, str]:
-    """Parse launch command args. Returns (port_or_none, host)."""
+) -> tuple[int | None, str, float]:
+    """Parse launch command args. Returns (port_or_none, host, timeout)."""
     remaining = list(args)
     host = DEFAULT_HOST
+    timeout = LAUNCH_TIMEOUT
     port_str: str | None = None
 
     i = 0
@@ -174,18 +176,26 @@ def _parse_launch_args(
                 raise SystemExit("--host requires a value")
             host = remaining[i + 1]
             i += 2
+        elif remaining[i] == "--timeout":
+            if i + 1 >= len(remaining):
+                raise SystemExit("--timeout requires a value")
+            try:
+                timeout = float(remaining[i + 1])
+            except ValueError:
+                raise SystemExit(f"Invalid timeout: {remaining[i + 1]}")
+            i += 2
         else:
             if port_str is None:
                 port_str = remaining[i]
             i += 1
 
     if port_str is None:
-        return None, host
+        return None, host, timeout
     try:
         port = int(port_str)
     except ValueError:
         raise SystemExit(f"Invalid port: {port_str}")
-    return port, host
+    return port, host, timeout
 
 
 async def dispatch[S](
@@ -196,7 +206,7 @@ async def dispatch[S](
 ) -> str:
     """Dispatch a CLI command through the gateway. Returns output text."""
     if command == Command.LAUNCH:
-        requested_port, host = _parse_launch_args(args)
+        requested_port, host, timeout = _parse_launch_args(args)
         if requested_port is not None:
             _check_port_free(host, requested_port)
             port = requested_port
@@ -205,7 +215,7 @@ async def dispatch[S](
         process = gateway.launch_browser(session_name, port)
         endpoint = BrowserEndpoint(host=host, port=port)
         try:
-            await _wait_for_cdp(gateway, endpoint)
+            await _wait_for_cdp(gateway, endpoint, timeout)
         except SystemExit:
             process.terminate()
             raise

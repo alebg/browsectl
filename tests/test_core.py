@@ -242,22 +242,24 @@ class TestNamedSessions:
 
 class TestParseLaunchArgs:
     def test_no_args_returns_none_port(self) -> None:
-        port, host = _parse_launch_args(())
+        port, host, timeout = _parse_launch_args(())
         assert port is None
         assert host == "localhost"
+        assert timeout == 15.0
 
     def test_explicit_port(self) -> None:
-        port, host = _parse_launch_args(("9222",))
+        port, host, timeout = _parse_launch_args(("9222",))
         assert port == 9222
         assert host == "localhost"
+        assert timeout == 15.0
 
     def test_port_with_host(self) -> None:
-        port, host = _parse_launch_args(("9333", "--host", "remote.dev"))
+        port, host, timeout = _parse_launch_args(("9333", "--host", "remote.dev"))
         assert port == 9333
         assert host == "remote.dev"
 
     def test_host_only_no_port(self) -> None:
-        port, host = _parse_launch_args(("--host", "mybox"))
+        port, host, timeout = _parse_launch_args(("--host", "mybox"))
         assert port is None
         assert host == "mybox"
 
@@ -268,6 +270,27 @@ class TestParseLaunchArgs:
     def test_host_without_value(self) -> None:
         with pytest.raises(SystemExit, match="--host requires"):
             _parse_launch_args(("9222", "--host"))
+
+    def test_timeout_flag(self) -> None:
+        port, host, timeout = _parse_launch_args(("--timeout", "30"))
+        assert port is None
+        assert timeout == 30.0
+
+    def test_timeout_with_port_and_host(self) -> None:
+        port, host, timeout = _parse_launch_args(
+            ("9333", "--host", "mybox", "--timeout", "5")
+        )
+        assert port == 9333
+        assert host == "mybox"
+        assert timeout == 5.0
+
+    def test_invalid_timeout(self) -> None:
+        with pytest.raises(SystemExit, match="Invalid timeout"):
+            _parse_launch_args(("--timeout", "slow"))
+
+    def test_timeout_without_value(self) -> None:
+        with pytest.raises(SystemExit, match="--timeout requires"):
+            _parse_launch_args(("--timeout",))
 
 
 class TestCheckPortFree:

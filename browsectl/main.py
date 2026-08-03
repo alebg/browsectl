@@ -18,7 +18,8 @@ Options:
                           Available: cdp
 
 Commands:
-  launch [port] [--host h]  Launch Chrome and connect (auto-assigns port if omitted)
+  launch [port] [--host h] [--timeout s]
+                          Launch Chrome and connect (auto-assigns port if omitted)
   stop                    Stop a launched Chrome session
   sessions                List all saved sessions and their status
   connect <host> <port>   Connect to an existing browser at host:port

@@ -1,9 +1,19 @@
 #!/usr/bin/env bash
 # Launch a Chrome instance with remote debugging enabled.
-# Logins persist across sessions in ~/.browsectl/chrome-profile.
+# Each profile gets its own directory under ~/.browsectl/profiles/<name>/.
 
-PROFILE_DIR="${HOME}/.browsectl/chrome-profile"
-PORT="${1:-9222}"
+if [ $# -lt 2 ]; then
+    echo "Missing required arguments." >&2
+    echo "Usage: browsectl-chrome <profile-name> <port>" >&2
+    echo "Example: browsectl-chrome myagent 9222" >&2
+    exit 1
+fi
+
+PROFILE_NAME="$1"
+PORT="$2"
+shift 2
+
+PROFILE_DIR="${HOME}/.browsectl/profiles/${PROFILE_NAME}"
 
 mkdir -p "$PROFILE_DIR"
 

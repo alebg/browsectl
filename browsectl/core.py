@@ -18,12 +18,13 @@ def _session_file(name: str) -> Path:
     return SESSIONS_DIR / f"{name}.json"
 
 
-def load_session(name: str = "default") -> tuple[BrowserEndpoint, str | None]:
+def load_session(name: str) -> tuple[BrowserEndpoint, str | None]:
     """Load the saved browser endpoint and target from the session file."""
     path = _session_file(name)
     if not path.exists():
         raise SystemExit(
-            "No active session. Run: browsectl connect <host> <port>"
+            f"No active session '{name}'. "
+            f"Run: browsectl -s {name} connect <host> <port>"
         )
     data = json.loads(path.read_text())
     target_id = data.get("target_id")
@@ -36,7 +37,8 @@ def load_session(name: str = "default") -> tuple[BrowserEndpoint, str | None]:
 def save_session(
     endpoint: BrowserEndpoint,
     target_id: str | None = None,
-    name: str = "default",
+    *,
+    name: str,
 ) -> None:
     """Save the browser endpoint and optional target to the session file."""
     SESSIONS_DIR.mkdir(parents=True, exist_ok=True)
@@ -53,12 +55,22 @@ async def dispatch[S](
     gateway: BrowserGateway[S],
     command: Command,
     args: tuple[str, ...],
-    session_name: str = "default",
+    session_name: str,
 ) -> str:
     """Dispatch a CLI command through the gateway. Returns output text."""
     if command == Command.CONNECT:
-        host = args[0] if args else "localhost"
-        port = int(args[1]) if len(args) > 1 else 9222
+        missing: list[str] = []
+        if not args:
+            missing.append("host")
+        if len(args) < 2:
+            missing.append("port")
+        if missing:
+            raise SystemExit(
+                f"Missing required arguments: {', '.join(missing)}\n"
+                f"Usage: browsectl -s <session> connect <host> <port>"
+            )
+        host = args[0]
+        port = int(args[1])
         endpoint = BrowserEndpoint(host=host, port=port)
         session = await gateway.connect(endpoint, None)
         await gateway.disconnect(session)

@@ -43,26 +43,48 @@ class TestDispatchConnect:
     async def test_saves_session(self, tmp_path, monkeypatch) -> None:  # type: ignore[no-untyped-def]
         monkeypatch.setattr("browsectl.core.SESSIONS_DIR", tmp_path)
         gw = _make_gateway()
-        result = await dispatch(gw, Command.CONNECT, ("localhost", "9222"))
+        result = await dispatch(
+            gw, Command.CONNECT, ("localhost", "9222"), session_name="test"
+        )
         assert "9222" in result
-        session_file = tmp_path / "default.json"
+        session_file = tmp_path / "test.json"
         assert session_file.exists()
         data = json.loads(session_file.read_text())
         assert data["host"] == "localhost"
         assert data["port"] == 9222
 
+    @pytest.mark.asyncio
+    async def test_connect_missing_host_and_port(self, tmp_path, monkeypatch) -> None:  # type: ignore[no-untyped-def]
+        monkeypatch.setattr("browsectl.core.SESSIONS_DIR", tmp_path)
+        gw = _make_gateway()
+        with pytest.raises(SystemExit, match="host"):
+            await dispatch(gw, Command.CONNECT, (), session_name="test")
+
+    @pytest.mark.asyncio
+    async def test_connect_missing_port(self, tmp_path, monkeypatch) -> None:  # type: ignore[no-untyped-def]
+        monkeypatch.setattr("browsectl.core.SESSIONS_DIR", tmp_path)
+        gw = _make_gateway()
+        with pytest.raises(SystemExit, match="port"):
+            await dispatch(
+                gw, Command.CONNECT, ("localhost",), session_name="test"
+            )
+
 
 class TestDispatchCommands:
+    SESSION_NAME = "test"
+
     @pytest.fixture(autouse=True)
     def _session(self, tmp_path, monkeypatch) -> None:  # type: ignore[no-untyped-def]
-        session_file = tmp_path / "default.json"
+        session_file = tmp_path / f"{self.SESSION_NAME}.json"
         session_file.write_text(json.dumps({"host": "localhost", "port": 9222}))
         monkeypatch.setattr("browsectl.core.SESSIONS_DIR", tmp_path)
 
     @pytest.mark.asyncio
     async def test_goto(self) -> None:
         gw = _make_gateway()
-        result = await dispatch(gw, Command.GOTO, ("http://x.com",))
+        result = await dispatch(
+            gw, Command.GOTO, ("http://x.com",), session_name=self.SESSION_NAME
+        )
         assert "X" in result
         gw.navigate.assert_called_once()
 
@@ -70,75 +92,97 @@ class TestDispatchCommands:
     async def test_screenshot(self, tmp_path) -> None:  # type: ignore[no-untyped-def]
         gw = _make_gateway()
         out = tmp_path / "shot.png"
-        result = await dispatch(gw, Command.SCREENSHOT, (str(out),))
+        result = await dispatch(
+            gw, Command.SCREENSHOT, (str(out),), session_name=self.SESSION_NAME
+        )
         assert out.exists()
         assert "3 bytes" in result
 
     @pytest.mark.asyncio
     async def test_click(self) -> None:
         gw = _make_gateway()
-        result = await dispatch(gw, Command.CLICK, ("#btn",))
+        result = await dispatch(
+            gw, Command.CLICK, ("#btn",), session_name=self.SESSION_NAME
+        )
         assert "#btn" in result
 
     @pytest.mark.asyncio
     async def test_type(self) -> None:
         gw = _make_gateway()
-        result = await dispatch(gw, Command.TYPE, ("#in", "hello"))
+        result = await dispatch(
+            gw, Command.TYPE, ("#in", "hello"), session_name=self.SESSION_NAME
+        )
         assert "#in" in result
 
     @pytest.mark.asyncio
     async def test_html(self) -> None:
         gw = _make_gateway()
-        result = await dispatch(gw, Command.HTML, ("#c",))
+        result = await dispatch(
+            gw, Command.HTML, ("#c",), session_name=self.SESSION_NAME
+        )
         assert result == "<b>hi</b>"
 
     @pytest.mark.asyncio
     async def test_eval(self) -> None:
         gw = _make_gateway()
-        result = await dispatch(gw, Command.EVAL, ("21+21",))
+        result = await dispatch(
+            gw, Command.EVAL, ("21+21",), session_name=self.SESSION_NAME
+        )
         assert result == "42"
 
     @pytest.mark.asyncio
     async def test_info(self) -> None:
         gw = _make_gateway()
-        result = await dispatch(gw, Command.INFO, ())
+        result = await dispatch(
+            gw, Command.INFO, (), session_name=self.SESSION_NAME
+        )
         assert "X" in result
         assert "http://x.com" in result
 
     @pytest.mark.asyncio
     async def test_tabs(self) -> None:
         gw = _make_gateway()
-        result = await dispatch(gw, Command.TABS, ())
+        result = await dispatch(
+            gw, Command.TABS, (), session_name=self.SESSION_NAME
+        )
         assert "Tab1" in result
 
     @pytest.mark.asyncio
     async def test_scroll(self) -> None:
         gw = _make_gateway()
-        result = await dispatch(gw, Command.SCROLL, ("500",))
+        result = await dispatch(
+            gw, Command.SCROLL, ("500",), session_name=self.SESSION_NAME
+        )
         assert "500" in result
         gw.scroll.assert_called_once_with("session", 500)
 
     @pytest.mark.asyncio
     async def test_wait(self) -> None:
         gw = _make_gateway()
-        result = await dispatch(gw, Command.WAIT, ("#target", "5"))
+        result = await dispatch(
+            gw, Command.WAIT, ("#target", "5"), session_name=self.SESSION_NAME
+        )
         assert "#target" in result
         gw.wait_for.assert_called_once_with("session", "#target", 5.0)
 
     @pytest.mark.asyncio
     async def test_clear_cookies(self) -> None:
         gw = _make_gateway()
-        result = await dispatch(gw, Command.CLEAR_COOKIES, ())
+        result = await dispatch(
+            gw, Command.CLEAR_COOKIES, (), session_name=self.SESSION_NAME
+        )
         assert "Cookies cleared" in result
         gw.clear_cookies.assert_called_once_with("session")
 
     @pytest.mark.asyncio
     async def test_switchtab_persists_target(self, tmp_path, monkeypatch) -> None:  # type: ignore[no-untyped-def]
-        session_file = tmp_path / "default.json"
+        session_file = tmp_path / f"{self.SESSION_NAME}.json"
         session_file.write_text(json.dumps({"host": "localhost", "port": 9222}))
         monkeypatch.setattr("browsectl.core.SESSIONS_DIR", tmp_path)
         gw = _make_gateway()
-        await dispatch(gw, Command.SWITCHTAB, ("t2",))
+        await dispatch(
+            gw, Command.SWITCHTAB, ("t2",), session_name=self.SESSION_NAME
+        )
         data = json.loads(session_file.read_text())
         assert data["target_id"] == "t2"
 
@@ -152,7 +196,6 @@ class TestNamedSessions:
             gw, Command.CONNECT, ("localhost", "9222"), session_name="linkedin"
         )
         assert (tmp_path / "linkedin.json").exists()
-        assert not (tmp_path / "default.json").exists()
 
     @pytest.mark.asyncio
     async def test_loads_named_session(self, tmp_path, monkeypatch) -> None:  # type: ignore[no-untyped-def]
@@ -170,13 +213,13 @@ class TestNamedSessions:
 
     @pytest.mark.asyncio
     async def test_connect_passes_target_id(self, tmp_path, monkeypatch) -> None:  # type: ignore[no-untyped-def]
-        session_file = tmp_path / "default.json"
+        session_file = tmp_path / "myagent.json"
         session_file.write_text(
             json.dumps({"host": "localhost", "port": 9222, "target_id": "t3"})
         )
         monkeypatch.setattr("browsectl.core.SESSIONS_DIR", tmp_path)
         gw = _make_gateway()
-        await dispatch(gw, Command.INFO, ())
+        await dispatch(gw, Command.INFO, (), session_name="myagent")
         from browsectl.models import BrowserEndpoint
         gw.connect.assert_called_once_with(
             BrowserEndpoint(host="localhost", port=9222), "t3"

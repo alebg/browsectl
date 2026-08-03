@@ -61,3 +61,4 @@ class Command(StrEnum):
     SWITCHTAB = "switchtab"
     SCROLL = "scroll"
     WAIT = "wait"
+    CLEAR_COOKIES = "clear-cookies"

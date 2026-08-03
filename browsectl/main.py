@@ -32,6 +32,7 @@ Commands:
   switchtab <tab-id>      Switch to a tab by ID (from 'tabs' output)
   scroll <pixels>         Scroll page (positive=down, negative=up)
   wait <selector> [timeout]  Wait for element to appear (default: 30s)
+  clear-cookies             Clear all browser cookies for this session
 """
 
 
@@ -55,6 +56,7 @@ def _build_cdp_gateway() -> BrowserGateway[cdp.CdpSession]:
         switch_tab=cdp.switch_tab,
         scroll=cdp.scroll,
         wait_for=cdp.wait_for,
+        clear_cookies=cdp.clear_cookies,
     )
 
 

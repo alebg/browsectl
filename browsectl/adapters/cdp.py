@@ -375,6 +375,11 @@ async def scroll(session: CdpSession, pixels: int) -> None:
     )
 
 
+async def clear_cookies(session: CdpSession) -> None:
+    """Clear all browser cookies for this Chrome instance."""
+    await send_command(session, "Network.clearBrowserCookies", None)
+
+
 async def wait_for(session: CdpSession, selector: str, timeout: float = 30.0) -> None:
     """Poll for a CSS selector until it exists or timeout."""
     js = f"document.querySelector({json.dumps(selector)}) !== null"

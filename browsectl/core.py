@@ -153,5 +153,9 @@ async def _run_command[S](
             await gateway.wait_for(session, args[0], timeout)
             return f"Found: {args[0]}"
 
+        case Command.CLEAR_COOKIES:
+            await gateway.clear_cookies(session)
+            return "Cookies cleared"
+
         case Command.CONNECT:
             return ""

@@ -34,6 +34,7 @@ def _make_gateway() -> BrowserGateway[str]:
         switch_tab=AsyncMock(),
         scroll=AsyncMock(),
         wait_for=AsyncMock(),
+        clear_cookies=AsyncMock(),
     )
 
 
@@ -123,6 +124,13 @@ class TestDispatchCommands:
         result = await dispatch(gw, Command.WAIT, ("#target", "5"))
         assert "#target" in result
         gw.wait_for.assert_called_once_with("session", "#target", 5.0)
+
+    @pytest.mark.asyncio
+    async def test_clear_cookies(self) -> None:
+        gw = _make_gateway()
+        result = await dispatch(gw, Command.CLEAR_COOKIES, ())
+        assert "Cookies cleared" in result
+        gw.clear_cookies.assert_called_once_with("session")
 
     @pytest.mark.asyncio
     async def test_switchtab_persists_target(self, tmp_path, monkeypatch) -> None:  # type: ignore[no-untyped-def]

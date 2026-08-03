@@ -3,6 +3,7 @@
 import attrs
 
 from browsectl.ports import (
+    TClearCookies,
     TClick,
     TConnect,
     TDisconnect,
@@ -38,3 +39,4 @@ class BrowserGateway[S]:
     switch_tab: TSwitchTab[S]
     scroll: TScroll[S]
     wait_for: TWaitFor[S]
+    clear_cookies: TClearCookies[S]

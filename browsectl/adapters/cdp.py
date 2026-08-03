@@ -18,6 +18,7 @@ from browsectl.models import (
 )
 
 CDP_TIMEOUT: float = 30.0
+WS_MAX_SIZE: int = 16 * 1024 * 1024
 
 
 class CdpError(Exception):
@@ -116,7 +117,9 @@ async def connect(
     ws_url: str = target["webSocketDebuggerUrl"]
     tid: str = target["id"]
 
-    ws = await websockets.asyncio.client.connect(ws_url)
+    ws = await websockets.asyncio.client.connect(
+        ws_url, max_size=WS_MAX_SIZE
+    )
     return CdpSession(ws=ws, target_id=tid, endpoint=endpoint)
 
 
@@ -355,7 +358,9 @@ async def switch_tab(session: CdpSession, target_id: str) -> None:
         raise CdpError(f"Tab not found: {target_id}")
 
     ws_url: str = target["webSocketDebuggerUrl"]
-    new_ws = await websockets.asyncio.client.connect(ws_url)
+    new_ws = await websockets.asyncio.client.connect(
+        ws_url, max_size=WS_MAX_SIZE
+    )
     await session.ws.close()
     session.ws = new_ws
     session.target_id = target_id

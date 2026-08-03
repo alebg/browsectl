@@ -27,70 +27,75 @@ python -m venv .venv
 
 ## Quick start
 
-### 1. Launch Chrome with remote debugging
-
-Symlink the launcher into your PATH once:
+### 1. Launch and connect (one step)
 
 ```bash
-ln -sf /path/to/browsectl/bin/browsectl-chrome ~/.local/bin/browsectl-chrome
+browsectl -s myagent launch 9222
 ```
 
-Then just run:
+This starts Chrome on port 9222 with its own profile at `~/.browsectl/profiles/myagent/`, waits for CDP readiness, connects, and saves the session. Logins persist across runs. Your existing Chrome windows are unaffected.
+
+If the port is already in use, `launch` fails immediately with a clear error.
+
+### 2. Use it
+
+Every command requires `-s <session>`:
 
 ```bash
-browsectl-chrome
+browsectl -s myagent goto "https://example.com"
+browsectl -s myagent screenshot                    # saves screenshot.png
+browsectl -s myagent screenshot /tmp/page.png      # custom path
+browsectl -s myagent info                          # current URL and title
+browsectl -s myagent html "h1"                     # extract innerHTML
+browsectl -s myagent eval "document.title"         # run JavaScript
+browsectl -s myagent click "#login-button"         # click by CSS selector
+browsectl -s myagent type "#email" "me@example.com"
+browsectl -s myagent scroll 500                    # scroll down 500px
+browsectl -s myagent scroll -300                   # scroll up 300px
+browsectl -s myagent wait ".results" 10            # wait for element (10s timeout)
+browsectl -s myagent tabs                          # list open tabs
+browsectl -s myagent newtab "https://github.com"   # open new tab
+browsectl -s myagent switchtab <tab-id>            # switch to tab (ID from 'tabs')
+browsectl -s myagent clear-cookies                 # clear all browser cookies
 ```
 
-This opens a separate Chrome instance with its own profile at `~/.browsectl/chrome-profile/`. Logins persist across sessions. Your existing Chrome windows are unaffected.
+### Connecting to an existing browser
 
-Alternatively, launch manually:
+If Chrome is already running with `--remote-debugging-port`, use `connect` instead of `launch`:
 
 ```bash
-google-chrome --remote-debugging-port=9222 --user-data-dir="$HOME/.browsectl/chrome-profile"
+browsectl -s myagent connect localhost 9222
 ```
 
-### 2. Connect
+Both host and port are required.
+
+## Multiple sessions
+
+Run multiple independent browser sessions simultaneously, each on its own port:
 
 ```bash
-browsectl connect              # defaults to localhost:9222
-browsectl connect myhost 9333  # custom host/port
+browsectl -s agent1 launch 9222
+browsectl -s agent2 launch 9333
+browsectl -s agent1 goto "https://example.com"
+browsectl -s agent2 goto "https://github.com"
 ```
 
-### 3. Use it
+Each session gets its own Chrome process, profile directory, cookies, and localStorage. See `docs/multi-session.md` for details.
+
+## Standalone Chrome launcher
+
+The `bin/browsectl-chrome` script launches Chrome without connecting. Useful when you want to manage Chrome separately:
 
 ```bash
-browsectl goto "https://example.com"
-browsectl screenshot                    # saves screenshot.png
-browsectl screenshot /tmp/page.png      # custom path
-browsectl info                          # current URL and title
-browsectl html "h1"                     # extract innerHTML
-browsectl eval "document.title"         # run JavaScript
-browsectl click "#login-button"         # click by CSS selector
-browsectl type "#email" "me@example.com"
-browsectl scroll 500                    # scroll down 500px
-browsectl scroll -300                   # scroll up 300px
-browsectl wait ".results" 10            # wait for element (10s timeout)
-browsectl tabs                          # list open tabs
-browsectl newtab "https://github.com"   # open new tab
-browsectl switchtab <tab-id>            # switch to tab (ID from 'tabs')
+browsectl-chrome myprofile 9222
 ```
 
-## Named sessions
-
-Run multiple independent browser sessions simultaneously:
-
-```bash
-browsectl -s linkedin connect localhost 9222
-browsectl -s linkedin goto "https://linkedin.com/feed/"
-browsectl -s research connect otherhost 9333
-```
-
-Each session stores its own endpoint and active tab in `~/.browsectl/sessions/<name>.json`. Default session name is `default`.
+Both profile name and port are required.
 
 ## Backend selection
 
 ```bash
-browsectl -b cdp goto "https://example.com"   # explicit (default)
+browsectl -s myagent -b cdp goto "https://example.com"   # explicit (default)
 ```
 
 Available backends: `cdp`. The architecture supports adding others (WebDriver, Marionette, etc.) without changing the core.

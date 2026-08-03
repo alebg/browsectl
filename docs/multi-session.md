@@ -7,9 +7,9 @@ browsectl supports multiple independent users (human, Claude agents, CI) driving
 Each session uses the `launch` command with a unique session name. Ports are auto-assigned so agents never clash:
 
 ```bash
-browsectl -s agent1 launch
-browsectl -s agent2 launch
-browsectl -s agent3 launch
+browsectl -s <session-a> launch
+browsectl -s <session-b> launch
+browsectl -s <session-c> launch
 ```
 
 Each `launch` call:
@@ -23,11 +23,11 @@ Each `launch` call:
 Every command requires the `-s` flag to target the correct session:
 
 ```bash
-browsectl -s agent1 goto "https://example.com"
-browsectl -s agent1 screenshot output.png
+browsectl -s <session-a> goto "https://example.com"
+browsectl -s <session-a> screenshot output.png
 
-browsectl -s agent2 goto "https://github.com"
-browsectl -s agent2 info
+browsectl -s <session-b> goto "https://github.com"
+browsectl -s <session-b> info
 ```
 
 ## Port assignment
@@ -35,14 +35,14 @@ browsectl -s agent2 info
 By default, `launch` auto-assigns a free port from the OS ephemeral range. You can also specify a port explicitly:
 
 ```bash
-browsectl -s agent1 launch 9500
+browsectl -s <session> launch <port>
 ```
 
 If the explicit port is already in use, `launch` fails immediately:
 
 ```
-$ browsectl -s agent2 launch 9500
-Port 9500 is already in use on localhost.
+$ browsectl -s <session> launch <port>
+Port <port> is already in use on localhost.
 Choose a different port or stop the existing process.
 ```
 
@@ -59,7 +59,7 @@ Using only the `-s` flag with `newtab` on a shared Chrome instance is NOT enough
 If Chrome is already running (started manually or by another tool), use `connect` instead of `launch`:
 
 ```bash
-browsectl -s legacy connect localhost 9500
+browsectl -s <session> connect <host> <port>
 ```
 
 Both host and port are required.
@@ -75,12 +75,15 @@ Shows every saved session with its name, host:port, PID, and status:
 - **dead**: the process has exited but the session file remains
 - **external**: connected via `connect` (no PID tracked)
 
+Use `--prune` to remove stale (dead/external) session files.
+
 No `-s` flag required.
 
 ## Stopping sessions
 
 ```bash
-browsectl -s agent1 stop
+browsectl -s <session> stop      # stop one session
+browsectl stop-all               # stop all sessions at once
 ```
 
 Sends SIGTERM to the Chrome process and removes the session file. Other sessions are unaffected.
@@ -90,9 +93,14 @@ Sends SIGTERM to the Chrome process and removes the session file. Other sessions
 The `launch` command waits up to 15 seconds for Chrome's CDP endpoint to become ready. Override with `--timeout`:
 
 ```bash
-browsectl -s agent1 launch --timeout 30
+browsectl -s <session> launch --timeout 30
 ```
 
 ## Cleanup
 
-Profile directories persist at `~/.browsectl/profiles/<name>/` so logins survive across runs. Remove them manually if no longer needed.
+Profile directories persist at `~/.browsectl/profiles/<session>/` so logins survive across runs. To list and clean up orphaned profiles:
+
+```bash
+browsectl profiles              # list all profiles (active/orphaned)
+browsectl profiles --prune      # remove orphaned profile directories
+```

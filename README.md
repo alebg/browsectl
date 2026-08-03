@@ -30,15 +30,15 @@ python -m venv .venv
 ### 1. Launch and connect (one step)
 
 ```bash
-browsectl -s myagent launch
+browsectl -s <session> launch
 ```
 
-This auto-assigns a free port, starts Chrome with its own profile at `~/.browsectl/profiles/myagent/`, waits for CDP readiness, connects, and saves the session. The port is stored in the session file so all subsequent commands find it automatically. Logins persist across runs. Your existing Chrome windows are unaffected.
+This auto-assigns a free port, starts Chrome with its own profile at `~/.browsectl/profiles/<session>/`, waits for CDP readiness, connects, and saves the session. The port is stored in the session file so all subsequent commands find it automatically. Logins persist across runs. Your existing Chrome windows are unaffected.
 
 You can also specify a port explicitly if needed:
 
 ```bash
-browsectl -s myagent launch 9500
+browsectl -s <session> launch <port>
 ```
 
 If the explicit port is already in use, `launch` fails immediately with a clear error.
@@ -46,7 +46,7 @@ If the explicit port is already in use, `launch` fails immediately with a clear 
 For slow-starting environments, override the CDP readiness timeout (default 15s):
 
 ```bash
-browsectl -s myagent launch --timeout 30
+browsectl -s <session> launch --timeout 30
 ```
 
 ### 2. Use it
@@ -54,28 +54,31 @@ browsectl -s myagent launch --timeout 30
 Every command requires `-s <session>`:
 
 ```bash
-browsectl -s myagent goto "https://example.com"
-browsectl -s myagent screenshot                    # saves screenshot.png
-browsectl -s myagent screenshot /tmp/page.png      # custom path
-browsectl -s myagent info                          # current URL and title
-browsectl -s myagent html "h1"                     # extract innerHTML
-browsectl -s myagent eval "document.title"         # run JavaScript
-browsectl -s myagent click "#login-button"         # click by CSS selector
-browsectl -s myagent type "#email" "me@example.com"
-browsectl -s myagent scroll 500                    # scroll down 500px
-browsectl -s myagent scroll -300                   # scroll up 300px
-browsectl -s myagent wait ".results" 10            # wait for element (10s timeout)
-browsectl -s myagent tabs                          # list open tabs
-browsectl -s myagent newtab "https://github.com"   # open new tab
-browsectl -s myagent switchtab <tab-id>            # switch to tab (ID from 'tabs')
-browsectl -s myagent clear-cookies                 # clear all browser cookies
+browsectl -s <session> goto "https://example.com"
+browsectl -s <session> screenshot                    # saves screenshot.png
+browsectl -s <session> screenshot /tmp/page.png      # custom path
+browsectl -s <session> info                          # current URL and title
+browsectl -s <session> html "h1"                     # extract innerHTML
+browsectl -s <session> eval "document.title"         # run JavaScript
+browsectl -s <session> click "#login-button"         # click by CSS selector
+browsectl -s <session> type "#email" "me@example.com"
+browsectl -s <session> scroll 500                    # scroll down 500px
+browsectl -s <session> scroll -300                   # scroll up 300px
+browsectl -s <session> wait ".results" 10            # wait for element (10s timeout)
+browsectl -s <session> tabs                          # list open tabs
+browsectl -s <session> newtab "https://github.com"   # open new tab
+browsectl -s <session> switchtab <tab-id>            # switch to tab (ID from 'tabs')
+browsectl -s <session> clear-cookies                 # clear all browser cookies
 ```
 
 ### 3. Manage sessions
 
 ```bash
 browsectl sessions                    # list all sessions and their status
-browsectl -s myagent stop             # kill Chrome and remove the session
+browsectl -s <session> stop           # kill Chrome and remove the session
+browsectl stop-all                    # stop all sessions at once
+browsectl profiles                    # list profile directories
+browsectl profiles --prune            # remove orphaned profile directories
 ```
 
 `sessions` shows each session's name, host:port, PID, and whether the process is running, dead, or external (connected manually, no PID tracked).
@@ -85,7 +88,7 @@ browsectl -s myagent stop             # kill Chrome and remove the session
 If Chrome is already running with `--remote-debugging-port`, use `connect` instead of `launch`:
 
 ```bash
-browsectl -s myagent connect localhost 9500
+browsectl -s <session> connect <host> <port>
 ```
 
 Both host and port are required.
@@ -95,18 +98,18 @@ Both host and port are required.
 Run multiple independent browser sessions simultaneously. Each gets its own auto-assigned port:
 
 ```bash
-browsectl -s agent1 launch
-browsectl -s agent2 launch
-browsectl -s agent1 goto "https://example.com"
-browsectl -s agent2 goto "https://github.com"
+browsectl -s <session-a> launch
+browsectl -s <session-b> launch
+browsectl -s <session-a> goto "https://example.com"
+browsectl -s <session-b> goto "https://github.com"
 ```
 
-Each session gets its own Chrome process, profile directory, cookies, and localStorage. Ports are auto-assigned so agents never clash. Use `browsectl sessions` to see all active sessions, and `browsectl -s <name> stop` to shut one down. See `docs/multi-session.md` for details.
+Each session gets its own Chrome process, profile directory, cookies, and localStorage. Ports are auto-assigned so agents never clash. Use `browsectl sessions` to see all active sessions, and `browsectl -s <session> stop` to shut one down. See `docs/multi-session.md` for details.
 
 ## Backend selection
 
 ```bash
-browsectl -s myagent -b cdp goto "https://example.com"   # explicit (default)
+browsectl -s <session> -b cdp goto "https://example.com"   # explicit (default)
 ```
 
 Available backends: `cdp`. The architecture supports adding others (WebDriver, Marionette, etc.) without changing the core.

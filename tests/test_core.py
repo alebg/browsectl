@@ -10,6 +10,7 @@ from browsectl.core import (
     _check_port_free,
     _parse_launch_args,
     dispatch,
+    stop_session,
 )
 from browsectl.gateway import BrowserGateway
 from browsectl.models import (
@@ -370,3 +371,63 @@ class TestDispatchLaunch:
         session_file = tmp_path / "remote1.json"
         data = json.loads(session_file.read_text())
         assert data["host"] == "mybox"
+
+    @pytest.mark.asyncio
+    async def test_launch_saves_pid(self, tmp_path, monkeypatch) -> None:  # type: ignore[no-untyped-def]
+        monkeypatch.setattr("browsectl.core.SESSIONS_DIR", tmp_path)
+        monkeypatch.setattr("browsectl.core.LAUNCH_TIMEOUT", 2.0)
+        monkeypatch.setattr("browsectl.core.LAUNCH_POLL_INTERVAL", 0.01)
+        monkeypatch.setattr(
+            "browsectl.core._check_port_free", lambda _h, _p: None
+        )
+
+        gw = _make_gateway()
+        await dispatch(
+            gw, Command.LAUNCH, ("9333",), session_name="pidtest"
+        )
+
+        session_file = tmp_path / "pidtest.json"
+        data = json.loads(session_file.read_text())
+        assert data["pid"] == 12345
+
+
+class TestStopSession:
+    def test_stops_running_process(self, tmp_path, monkeypatch) -> None:  # type: ignore[no-untyped-def]
+        monkeypatch.setattr("browsectl.core.SESSIONS_DIR", tmp_path)
+        session_file = tmp_path / "agent1.json"
+        session_file.write_text(
+            json.dumps({"host": "localhost", "port": 9333, "pid": 99999999})
+        )
+        result = stop_session("agent1")
+        assert "agent1" in result
+        assert "99999999" in result
+        assert not session_file.exists()
+
+    def test_stops_without_pid(self, tmp_path, monkeypatch) -> None:  # type: ignore[no-untyped-def]
+        monkeypatch.setattr("browsectl.core.SESSIONS_DIR", tmp_path)
+        session_file = tmp_path / "nopid.json"
+        session_file.write_text(
+            json.dumps({"host": "localhost", "port": 9333})
+        )
+        result = stop_session("nopid")
+        assert "no associated process" in result
+        assert not session_file.exists()
+
+    def test_no_session_fails(self, tmp_path, monkeypatch) -> None:  # type: ignore[no-untyped-def]
+        monkeypatch.setattr("browsectl.core.SESSIONS_DIR", tmp_path)
+        with pytest.raises(SystemExit, match="No session"):
+            stop_session("ghost")
+
+    @pytest.mark.asyncio
+    async def test_dispatch_stop(self, tmp_path, monkeypatch) -> None:  # type: ignore[no-untyped-def]
+        monkeypatch.setattr("browsectl.core.SESSIONS_DIR", tmp_path)
+        session_file = tmp_path / "stopme.json"
+        session_file.write_text(
+            json.dumps({"host": "localhost", "port": 9333, "pid": 99999999})
+        )
+        gw = _make_gateway()
+        result = await dispatch(
+            gw, Command.STOP, (), session_name="stopme"
+        )
+        assert "Stopped" in result
+        assert not session_file.exists()

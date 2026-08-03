@@ -19,6 +19,7 @@ Options:
 
 Commands:
   launch [port] [--host h]  Launch Chrome and connect (auto-assigns port if omitted)
+  stop                    Stop a launched Chrome session
   connect <host> <port>   Connect to an existing browser at host:port
   goto <url>              Navigate to URL
   screenshot [path]       Save screenshot (default: screenshot.png)

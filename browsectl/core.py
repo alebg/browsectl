@@ -4,6 +4,8 @@ import asyncio
 import fcntl
 import json
 import logging
+import os
+import signal
 import socket
 import time
 from pathlib import Path
@@ -45,16 +47,37 @@ def save_session(
     target_id: str | None = None,
     *,
     name: str,
+    pid: int | None = None,
 ) -> None:
     """Save the browser endpoint and optional target to the session file."""
     SESSIONS_DIR.mkdir(parents=True, exist_ok=True)
     data: dict[str, object] = {"host": endpoint.host, "port": endpoint.port}
     if target_id is not None:
         data["target_id"] = target_id
+    if pid is not None:
+        data["pid"] = pid
     path = _session_file(name)
     with path.open("w") as f:
         fcntl.flock(f, fcntl.LOCK_EX)
         f.write(json.dumps(data))
+
+
+def stop_session(name: str) -> str:
+    """Stop a launched Chrome session by killing its process."""
+    path = _session_file(name)
+    if not path.exists():
+        raise SystemExit(f"No session '{name}' found.")
+    data = json.loads(path.read_text())
+    pid = data.get("pid")
+    if not isinstance(pid, int):
+        path.unlink()
+        return f"Session '{name}' removed (no associated process)."
+    try:
+        os.kill(pid, signal.SIGTERM)
+    except ProcessLookupError:
+        pass
+    path.unlink()
+    return f"Stopped session '{name}' (pid {pid})."
 
 
 def _find_free_port(host: str) -> int:
@@ -154,8 +177,11 @@ async def dispatch[S](
         except SystemExit:
             process.terminate()
             raise
-        save_session(endpoint, name=session_name)
+        save_session(endpoint, name=session_name, pid=process.pid)
         return f"Launched Chrome on {host}:{port} (pid {process.pid})"
+
+    if command == Command.STOP:
+        return stop_session(session_name)
 
     if command == Command.CONNECT:
         missing: list[str] = []
@@ -268,5 +294,5 @@ async def _run_command[S](
             await gateway.clear_cookies(session)
             return "Cookies cleared"
 
-        case Command.CONNECT | Command.LAUNCH:
+        case Command.CONNECT | Command.LAUNCH | Command.STOP:
             return ""

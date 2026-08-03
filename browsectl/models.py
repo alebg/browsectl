@@ -64,3 +64,4 @@ class Command(StrEnum):
     CLEAR_COOKIES = "clear-cookies"
     LAUNCH = "launch"
     STOP = "stop"
+    SESSIONS = "sessions"

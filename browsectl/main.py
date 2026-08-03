@@ -20,6 +20,7 @@ Options:
 Commands:
   launch [port] [--host h]  Launch Chrome and connect (auto-assigns port if omitted)
   stop                    Stop a launched Chrome session
+  sessions                List all saved sessions and their status
   connect <host> <port>   Connect to an existing browser at host:port
   goto <url>              Navigate to URL
   screenshot [path]       Save screenshot (default: screenshot.png)
@@ -97,13 +98,6 @@ def _parse_args(
         print(USAGE)
         raise SystemExit(0)
 
-    if session_name is None:
-        raise SystemExit(
-            "Missing required option: -s <session>\n"
-            "Every command requires a named session.\n"
-            "Example: browsectl -s mysession info"
-        )
-
     try:
         command = Command(args[0])
     except ValueError:
@@ -111,7 +105,14 @@ def _parse_args(
         print(USAGE, file=sys.stderr)
         raise SystemExit(1)
 
-    return backend, session_name, command, tuple(args[1:])
+    if session_name is None and command != Command.SESSIONS:
+        raise SystemExit(
+            "Missing required option: -s <session>\n"
+            "Every command requires a named session.\n"
+            "Example: browsectl -s mysession info"
+        )
+
+    return backend, session_name or "", command, tuple(args[1:])
 
 
 def main() -> None:

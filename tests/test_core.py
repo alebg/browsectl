@@ -10,6 +10,7 @@ from browsectl.core import (
     _check_port_free,
     _parse_launch_args,
     dispatch,
+    list_sessions,
     stop_session,
 )
 from browsectl.gateway import BrowserGateway
@@ -450,3 +451,55 @@ class TestStopSession:
         )
         assert "Stopped" in result
         assert not session_file.exists()
+
+
+class TestListSessions:
+    def test_no_sessions_dir(self, tmp_path, monkeypatch) -> None:  # type: ignore[no-untyped-def]
+        monkeypatch.setattr("browsectl.core.SESSIONS_DIR", tmp_path / "missing")
+        assert list_sessions() == "(no sessions)"
+
+    def test_empty_dir(self, tmp_path, monkeypatch) -> None:  # type: ignore[no-untyped-def]
+        monkeypatch.setattr("browsectl.core.SESSIONS_DIR", tmp_path)
+        assert list_sessions() == "(no sessions)"
+
+    def test_lists_multiple_sessions(self, tmp_path, monkeypatch) -> None:  # type: ignore[no-untyped-def]
+        monkeypatch.setattr("browsectl.core.SESSIONS_DIR", tmp_path)
+        (tmp_path / "alpha.json").write_text(
+            json.dumps({"host": "localhost", "port": 9222, "pid": 99999999})
+        )
+        (tmp_path / "beta.json").write_text(
+            json.dumps({"host": "mybox", "port": 9333})
+        )
+        result = list_sessions()
+        assert "alpha" in result
+        assert "localhost:9222" in result
+        assert "beta" in result
+        assert "mybox:9333" in result
+        assert "external" in result
+
+    def test_dead_process_shown_as_dead(self, tmp_path, monkeypatch) -> None:  # type: ignore[no-untyped-def]
+        monkeypatch.setattr("browsectl.core.SESSIONS_DIR", tmp_path)
+        (tmp_path / "stale.json").write_text(
+            json.dumps({"host": "localhost", "port": 9222, "pid": 99999999})
+        )
+        result = list_sessions()
+        assert "dead" in result
+
+    def test_corrupt_file_handled(self, tmp_path, monkeypatch) -> None:  # type: ignore[no-untyped-def]
+        monkeypatch.setattr("browsectl.core.SESSIONS_DIR", tmp_path)
+        (tmp_path / "broken.json").write_text("not json{{{")
+        result = list_sessions()
+        assert "broken" in result
+        assert "corrupt" in result
+
+    @pytest.mark.asyncio
+    async def test_dispatch_sessions(self, tmp_path, monkeypatch) -> None:  # type: ignore[no-untyped-def]
+        monkeypatch.setattr("browsectl.core.SESSIONS_DIR", tmp_path)
+        (tmp_path / "myagent.json").write_text(
+            json.dumps({"host": "localhost", "port": 9222, "pid": 99999999})
+        )
+        gw = _make_gateway()
+        result = await dispatch(
+            gw, Command.SESSIONS, (), session_name=""
+        )
+        assert "myagent" in result

@@ -63,3 +63,4 @@ class Command(StrEnum):
     WAIT = "wait"
     CLEAR_COOKIES = "clear-cookies"
     LAUNCH = "launch"
+    STOP = "stop"

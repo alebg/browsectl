@@ -10,16 +10,15 @@ from browsectl.gateway import BrowserGateway
 from browsectl.models import Command
 
 USAGE = """\
-Usage: browsectl [-b <backend>] [-s <session>] <command> [args...]
+Usage: browsectl -s <session> [-b <backend>] <command> [args...]
 
 Options:
+  -s, --session <name>    Named session (REQUIRED)
   -b, --backend <name>    Browser backend (default: cdp)
                           Available: cdp
-  -s, --session <name>    Named session (default: default)
-                          Allows multiple independent browser sessions
 
 Commands:
-  connect [host] [port]   Connect to browser (default: localhost:9222)
+  connect <host> <port>   Connect to browser at host:port
   goto <url>              Navigate to URL
   screenshot [path]       Save screenshot (default: screenshot.png)
   click <selector>        Click element by CSS selector
@@ -64,7 +63,7 @@ def _parse_args(
     argv: list[str],
 ) -> tuple[Backend, str, Command, tuple[str, ...]]:
     backend = Backend.CDP
-    session_name = "default"
+    session_name: str | None = None
     args = list(argv)
 
     while args and args[0].startswith("-"):
@@ -94,6 +93,13 @@ def _parse_args(
     if not args:
         print(USAGE)
         raise SystemExit(0)
+
+    if session_name is None:
+        raise SystemExit(
+            "Missing required option: -s <session>\n"
+            "Every command requires a named session.\n"
+            "Example: browsectl -s mysession info"
+        )
 
     try:
         command = Command(args[0])

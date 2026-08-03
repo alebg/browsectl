@@ -239,7 +239,12 @@ class TestNamedSessions:
 
 
 class TestParseLaunchArgs:
-    def test_port_only(self) -> None:
+    def test_no_args_returns_none_port(self) -> None:
+        port, host = _parse_launch_args(())
+        assert port is None
+        assert host == "localhost"
+
+    def test_explicit_port(self) -> None:
         port, host = _parse_launch_args(("9222",))
         assert port == 9222
         assert host == "localhost"
@@ -249,9 +254,10 @@ class TestParseLaunchArgs:
         assert port == 9333
         assert host == "remote.dev"
 
-    def test_missing_port(self) -> None:
-        with pytest.raises(SystemExit, match="port"):
-            _parse_launch_args(())
+    def test_host_only_no_port(self) -> None:
+        port, host = _parse_launch_args(("--host", "mybox"))
+        assert port is None
+        assert host == "mybox"
 
     def test_invalid_port(self) -> None:
         with pytest.raises(SystemExit, match="Invalid port"):
@@ -306,6 +312,27 @@ class TestDispatchLaunch:
         assert data["port"] == 9333
 
         gw.launch_browser.assert_called_once_with("agent1", 9333)
+
+    @pytest.mark.asyncio
+    async def test_launch_auto_port(self, tmp_path, monkeypatch) -> None:  # type: ignore[no-untyped-def]
+        monkeypatch.setattr("browsectl.core.SESSIONS_DIR", tmp_path)
+        monkeypatch.setattr("browsectl.core.LAUNCH_TIMEOUT", 2.0)
+        monkeypatch.setattr("browsectl.core.LAUNCH_POLL_INTERVAL", 0.01)
+        monkeypatch.setattr(
+            "browsectl.core._find_free_port", lambda _h: 44321
+        )
+
+        gw = _make_gateway()
+        result = await dispatch(
+            gw, Command.LAUNCH, (), session_name="auto1"
+        )
+        assert "44321" in result
+
+        session_file = tmp_path / "auto1.json"
+        data = json.loads(session_file.read_text())
+        assert data["port"] == 44321
+
+        gw.launch_browser.assert_called_once_with("auto1", 44321)
 
     @pytest.mark.asyncio
     async def test_launch_port_in_use_fails(self, tmp_path, monkeypatch) -> None:  # type: ignore[no-untyped-def]

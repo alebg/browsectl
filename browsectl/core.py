@@ -57,6 +57,18 @@ def save_session(
         f.write(json.dumps(data))
 
 
+def _find_free_port(host: str) -> int:
+    """Ask the OS for a free ephemeral port."""
+    sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    try:
+        sock.bind((host, 0))
+        addr = sock.getsockname()
+        port: int = int(addr[1])
+        return port
+    finally:
+        sock.close()
+
+
 def _check_port_free(host: str, port: int) -> None:
     """Fail fast if the port is already in use."""
     sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -94,8 +106,8 @@ async def _wait_for_cdp[S](
 
 def _parse_launch_args(
     args: tuple[str, ...],
-) -> tuple[int, str]:
-    """Parse launch command args. Returns (port, host)."""
+) -> tuple[int | None, str]:
+    """Parse launch command args. Returns (port_or_none, host)."""
     remaining = list(args)
     host = DEFAULT_HOST
     port_str: str | None = None
@@ -113,10 +125,7 @@ def _parse_launch_args(
             i += 1
 
     if port_str is None:
-        raise SystemExit(
-            "Missing required argument: port\n"
-            "Usage: browsectl -s <session> launch <port> [--host <host>]"
-        )
+        return None, host
     try:
         port = int(port_str)
     except ValueError:
@@ -132,8 +141,12 @@ async def dispatch[S](
 ) -> str:
     """Dispatch a CLI command through the gateway. Returns output text."""
     if command == Command.LAUNCH:
-        port, host = _parse_launch_args(args)
-        _check_port_free(host, port)
+        requested_port, host = _parse_launch_args(args)
+        if requested_port is not None:
+            _check_port_free(host, requested_port)
+            port = requested_port
+        else:
+            port = _find_free_port(host)
         process = gateway.launch_browser(session_name, port)
         endpoint = BrowserEndpoint(host=host, port=port)
         try:

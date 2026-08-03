@@ -3,6 +3,7 @@
 import json
 import os
 import socket
+from pathlib import Path
 from unittest.mock import AsyncMock, Mock
 
 import pytest
@@ -11,6 +12,7 @@ from browsectl.core import (
     _check_port_free,
     _parse_launch_args,
     dispatch,
+    list_profiles,
     list_sessions,
     stop_all_sessions,
     stop_session,
@@ -611,3 +613,80 @@ class TestStopAllSessions:
         )
         assert "x: removed" in result
         assert not list(tmp_path.glob("*.json"))
+
+
+class TestListProfiles:
+    def _setup(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+    ) -> tuple[Path, Path]:
+        sessions = tmp_path / "sessions"
+        profiles = tmp_path / "profiles"
+        sessions.mkdir()
+        profiles.mkdir()
+        monkeypatch.setattr("browsectl.core.SESSIONS_DIR", sessions)
+        monkeypatch.setattr("browsectl.core.PROFILES_DIR", profiles)
+        return sessions, profiles
+
+    def test_no_profiles_dir(self, tmp_path, monkeypatch) -> None:  # type: ignore[no-untyped-def]
+        monkeypatch.setattr(
+            "browsectl.core.PROFILES_DIR", tmp_path / "missing"
+        )
+        assert list_profiles() == "(no profiles)"
+
+    def test_empty_dir(self, tmp_path, monkeypatch) -> None:  # type: ignore[no-untyped-def]
+        sessions, profiles = self._setup(tmp_path, monkeypatch)
+        assert list_profiles() == "(no profiles)"
+
+    def test_lists_active_and_orphaned(self, tmp_path, monkeypatch) -> None:  # type: ignore[no-untyped-def]
+        sessions, profiles = self._setup(tmp_path, monkeypatch)
+        (profiles / "agent1").mkdir()
+        (profiles / "agent2").mkdir()
+        (sessions / "agent1.json").write_text(
+            json.dumps({"host": "localhost", "port": 9222})
+        )
+        result = list_profiles()
+        assert "agent1  active" in result
+        assert "agent2  orphaned" in result
+
+    def test_prune_removes_orphaned(self, tmp_path, monkeypatch) -> None:  # type: ignore[no-untyped-def]
+        sessions, profiles = self._setup(tmp_path, monkeypatch)
+        (profiles / "keep").mkdir()
+        (profiles / "remove").mkdir()
+        (sessions / "keep.json").write_text(
+            json.dumps({"host": "localhost", "port": 9222})
+        )
+        result = list_profiles(prune=True)
+        assert (profiles / "keep").exists()
+        assert not (profiles / "remove").exists()
+        assert "Pruned 1" in result
+        assert "remove" in result
+        assert "keep  active" in result
+
+    def test_prune_all_orphaned(self, tmp_path, monkeypatch) -> None:  # type: ignore[no-untyped-def]
+        sessions, profiles = self._setup(tmp_path, monkeypatch)
+        (profiles / "old1").mkdir()
+        (profiles / "old2").mkdir()
+        result = list_profiles(prune=True)
+        assert "Pruned 2" in result
+        assert not list(profiles.iterdir())
+
+    @pytest.mark.asyncio
+    async def test_dispatch_profiles(self, tmp_path, monkeypatch) -> None:  # type: ignore[no-untyped-def]
+        sessions, profiles = self._setup(tmp_path, monkeypatch)
+        (profiles / "myagent").mkdir()
+        gw = _make_gateway()
+        result = await dispatch(
+            gw, Command.PROFILES, (), session_name=""
+        )
+        assert "myagent  orphaned" in result
+
+    @pytest.mark.asyncio
+    async def test_dispatch_profiles_prune(self, tmp_path, monkeypatch) -> None:  # type: ignore[no-untyped-def]
+        sessions, profiles = self._setup(tmp_path, monkeypatch)
+        (profiles / "stale").mkdir()
+        gw = _make_gateway()
+        result = await dispatch(
+            gw, Command.PROFILES, ("--prune",), session_name=""
+        )
+        assert "Pruned" in result
+        assert not (profiles / "stale").exists()

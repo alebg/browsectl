@@ -86,7 +86,7 @@ class TestSwitchTab:
             side_effect=lambda: call_order.append("close_old")
         )
 
-        async def fake_connect(url: str) -> AsyncMock:
+        async def fake_connect(url: str, **kwargs: object) -> AsyncMock:
             call_order.append("connect_new")
             return new_ws
 

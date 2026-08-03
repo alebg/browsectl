@@ -130,7 +130,8 @@ class TestConnect:
 
             assert session.target_id == "ABC123"
             mock_ws_connect.assert_called_once_with(
-                "ws://localhost:9222/devtools/page/ABC123"
+                "ws://localhost:9222/devtools/page/ABC123",
+                max_size=16777216,
             )
 
     @pytest.mark.asyncio
@@ -163,7 +164,8 @@ class TestConnect:
 
             assert session.target_id == "stored"
             mock_ws_connect.assert_called_once_with(
-                "ws://localhost:9222/devtools/page/stored"
+                "ws://localhost:9222/devtools/page/stored",
+                max_size=16777216,
             )
 
     @pytest.mark.asyncio

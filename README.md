@@ -30,12 +30,18 @@ python -m venv .venv
 ### 1. Launch and connect (one step)
 
 ```bash
-browsectl -s myagent launch 9222
+browsectl -s myagent launch
 ```
 
-This starts Chrome on port 9222 with its own profile at `~/.browsectl/profiles/myagent/`, waits for CDP readiness, connects, and saves the session. Logins persist across runs. Your existing Chrome windows are unaffected.
+This auto-assigns a free port, starts Chrome with its own profile at `~/.browsectl/profiles/myagent/`, waits for CDP readiness, connects, and saves the session. The port is stored in the session file so all subsequent commands find it automatically. Logins persist across runs. Your existing Chrome windows are unaffected.
 
-If the port is already in use, `launch` fails immediately with a clear error.
+You can also specify a port explicitly if needed:
+
+```bash
+browsectl -s myagent launch 9500
+```
+
+If the explicit port is already in use, `launch` fails immediately with a clear error.
 
 ### 2. Use it
 
@@ -64,30 +70,30 @@ browsectl -s myagent clear-cookies                 # clear all browser cookies
 If Chrome is already running with `--remote-debugging-port`, use `connect` instead of `launch`:
 
 ```bash
-browsectl -s myagent connect localhost 9222
+browsectl -s myagent connect localhost 9500
 ```
 
 Both host and port are required.
 
 ## Multiple sessions
 
-Run multiple independent browser sessions simultaneously, each on its own port:
+Run multiple independent browser sessions simultaneously. Each gets its own auto-assigned port:
 
 ```bash
-browsectl -s agent1 launch 9222
-browsectl -s agent2 launch 9333
+browsectl -s agent1 launch
+browsectl -s agent2 launch
 browsectl -s agent1 goto "https://example.com"
 browsectl -s agent2 goto "https://github.com"
 ```
 
-Each session gets its own Chrome process, profile directory, cookies, and localStorage. See `docs/multi-session.md` for details.
+Each session gets its own Chrome process, profile directory, cookies, and localStorage. Ports are auto-assigned so agents never clash. See `docs/multi-session.md` for details.
 
 ## Standalone Chrome launcher
 
 The `bin/browsectl-chrome` script launches Chrome without connecting. Useful when you want to manage Chrome separately:
 
 ```bash
-browsectl-chrome myprofile 9222
+browsectl-chrome myprofile 9500
 ```
 
 Both profile name and port are required.

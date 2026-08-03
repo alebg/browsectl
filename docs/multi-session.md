@@ -4,24 +4,19 @@ browsectl supports multiple independent users (human, Claude agents, CI) driving
 
 ## Setup
 
-Each session uses the `launch` command with a unique session name and port:
+Each session uses the `launch` command with a unique session name. Ports are auto-assigned so agents never clash:
 
 ```bash
-# First session
-browsectl -s agent1 launch 9222
-
-# Second session
-browsectl -s agent2 launch 9333
-
-# Third session
-browsectl -s agent3 launch 9444
+browsectl -s agent1 launch
+browsectl -s agent2 launch
+browsectl -s agent3 launch
 ```
 
 Each `launch` call:
-1. Checks the port is free (fails immediately if occupied)
+1. Finds a free ephemeral port (or checks the explicit port is free, if one was provided)
 2. Starts Chrome with `--remote-debugging-port=<port>` and `--user-data-dir=~/.browsectl/profiles/<session>/`
 3. Waits for CDP readiness
-4. Saves the connection info to `~/.browsectl/sessions/<session>.json`
+4. Saves the connection info (including port) to `~/.browsectl/sessions/<session>.json`
 
 ## Using sessions
 
@@ -35,17 +30,21 @@ browsectl -s agent2 goto "https://github.com"
 browsectl -s agent2 info
 ```
 
-## Port conflict detection
+## Port assignment
 
-If an agent tries to launch on a port that is already in use, `launch` fails immediately:
+By default, `launch` auto-assigns a free port from the OS ephemeral range. You can also specify a port explicitly:
+
+```bash
+browsectl -s agent1 launch 9500
+```
+
+If the explicit port is already in use, `launch` fails immediately:
 
 ```
-$ browsectl -s agent3 launch 9222
-Port 9222 is already in use on localhost.
+$ browsectl -s agent2 launch 9500
+Port 9500 is already in use on localhost.
 Choose a different port or stop the existing process.
 ```
-
-This prevents accidental sharing of Chrome instances between agents.
 
 ## Why separate Chrome instances?
 
@@ -60,7 +59,7 @@ Using only the `-s` flag with `newtab` on a shared Chrome instance is NOT enough
 If Chrome is already running (started manually or by another tool), use `connect` instead of `launch`:
 
 ```bash
-browsectl -s legacy connect localhost 9222
+browsectl -s legacy connect localhost 9500
 ```
 
 Both host and port are required.
@@ -70,17 +69,17 @@ Both host and port are required.
 The `bin/browsectl-chrome` script launches Chrome without connecting. Useful for manual setups:
 
 ```bash
-browsectl-chrome myprofile 9222
+browsectl-chrome myprofile 9500
 ```
 
 Both profile name and port are required. Profiles are stored at `~/.browsectl/profiles/<name>/`.
 
 ## Cleanup
 
-Kill Chrome instances by port when done:
+Kill Chrome instances by session name:
 
 ```bash
-pkill -f "remote-debugging-port=9333"
+pkill -f "user-data-dir=.*profiles/agent1"
 ```
 
 Profile directories persist at `~/.browsectl/profiles/<name>/` so logins survive across runs. Remove them manually if no longer needed.

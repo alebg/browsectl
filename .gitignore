@@ -1,3 +1,6 @@
+# Screenshots from browsectl
+*.png
+
 # AI tools so devs dont push their stuff here
 .claude/
 .cursor/

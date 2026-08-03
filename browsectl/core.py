@@ -80,36 +80,85 @@ def stop_session(name: str) -> str:
     return f"Stopped session '{name}' (pid {pid})."
 
 
-def list_sessions() -> str:
-    """List all saved sessions with their status."""
+def _session_status(pid: object) -> tuple[bool, str]:
+    """Check if a PID is alive and return (alive, status_label)."""
+    if not isinstance(pid, int):
+        return False, "external"
+    try:
+        os.kill(pid, 0)
+        return True, "running"
+    except ProcessLookupError:
+        return False, "dead"
+    except PermissionError:
+        return True, "running"
+
+
+def list_sessions(*, prune: bool = False) -> str:
+    """List all saved sessions with their status. Optionally prune dead ones."""
     if not SESSIONS_DIR.exists():
         return "(no sessions)"
     files = sorted(SESSIONS_DIR.glob("*.json"))
     if not files:
         return "(no sessions)"
     lines: list[str] = []
+    pruned: list[str] = []
     for f in files:
         name = f.stem
         try:
             data = json.loads(f.read_text())
         except (json.JSONDecodeError, OSError):
-            lines.append(f"{name}  (corrupt session file)")
+            if prune:
+                f.unlink()
+                pruned.append(name)
+            else:
+                lines.append(f"{name}  (corrupt session file)")
             continue
         host = data.get("host", "?")
         port = data.get("port", "?")
         pid = data.get("pid")
-        alive = False
+        alive, status = _session_status(pid)
+        if prune and not alive:
+            f.unlink()
+            pruned.append(name)
+        else:
+            lines.append(f"{name}  {host}:{port}  pid={pid}  {status}")
+    parts: list[str] = []
+    if lines:
+        parts.append("\n".join(lines))
+    if pruned:
+        parts.append(f"Pruned {len(pruned)} stale session(s): {', '.join(pruned)}")
+    if not parts:
+        return "(no sessions)"
+    return "\n".join(parts)
+
+
+def stop_all_sessions() -> str:
+    """Stop all sessions, killing any running processes."""
+    if not SESSIONS_DIR.exists():
+        return "(no sessions to stop)"
+    files = sorted(SESSIONS_DIR.glob("*.json"))
+    if not files:
+        return "(no sessions to stop)"
+    results: list[str] = []
+    for f in files:
+        name = f.stem
+        try:
+            data = json.loads(f.read_text())
+        except (json.JSONDecodeError, OSError):
+            f.unlink()
+            results.append(f"{name}: removed (corrupt file)")
+            continue
+        pid = data.get("pid")
         if isinstance(pid, int):
             try:
-                os.kill(pid, 0)
-                alive = True
+                os.kill(pid, signal.SIGTERM)
+                results.append(f"{name}: stopped (pid {pid})")
             except ProcessLookupError:
-                pass
-            except PermissionError:
-                alive = True
-        status = "running" if alive else "dead" if isinstance(pid, int) else "external"
-        lines.append(f"{name}  {host}:{port}  pid={pid}  {status}")
-    return "\n".join(lines)
+                results.append(f"{name}: removed (process already dead)")
+        else:
+            results.append(f"{name}: removed (no associated process)")
+        f.unlink()
+    return "\n".join(results)
 
 
 def _find_free_port(host: str) -> int:
@@ -226,7 +275,11 @@ async def dispatch[S](
         return stop_session(session_name)
 
     if command == Command.SESSIONS:
-        return list_sessions()
+        prune = "--prune" in args
+        return list_sessions(prune=prune)
+
+    if command == Command.STOP_ALL:
+        return stop_all_sessions()
 
     if command == Command.CONNECT:
         missing: list[str] = []
@@ -339,5 +392,11 @@ async def _run_command[S](
             await gateway.clear_cookies(session)
             return "Cookies cleared"
 
-        case Command.CONNECT | Command.LAUNCH | Command.STOP | Command.SESSIONS:
+        case (
+            Command.CONNECT
+            | Command.LAUNCH
+            | Command.STOP
+            | Command.SESSIONS
+            | Command.STOP_ALL
+        ):
             return ""

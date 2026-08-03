@@ -21,7 +21,8 @@ Commands:
   launch [port] [--host h] [--timeout s]
                           Launch Chrome and connect (auto-assigns port if omitted)
   stop                    Stop a launched Chrome session
-  sessions                List all saved sessions and their status
+  stop-all                Stop all sessions and kill their processes
+  sessions [--prune]      List all saved sessions (--prune removes stale ones)
   connect <host> <port>   Connect to an existing browser at host:port
   goto <url>              Navigate to URL
   screenshot [path]       Save screenshot (default: screenshot.png)
@@ -106,7 +107,8 @@ def _parse_args(
         print(USAGE, file=sys.stderr)
         raise SystemExit(1)
 
-    if session_name is None and command != Command.SESSIONS:
+    no_session_commands = {Command.SESSIONS, Command.STOP_ALL}
+    if session_name is None and command not in no_session_commands:
         raise SystemExit(
             "Missing required option: -s <session>\n"
             "Every command requires a named session.\n"

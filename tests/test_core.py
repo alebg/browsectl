@@ -1,6 +1,7 @@
 """Tests for core command dispatch."""
 
 import json
+import os
 import socket
 from unittest.mock import AsyncMock, Mock
 
@@ -11,6 +12,7 @@ from browsectl.core import (
     _parse_launch_args,
     dispatch,
     list_sessions,
+    stop_all_sessions,
     stop_session,
 )
 from browsectl.gateway import BrowserGateway
@@ -526,3 +528,86 @@ class TestListSessions:
             gw, Command.SESSIONS, (), session_name=""
         )
         assert "myagent" in result
+
+    def test_prune_removes_dead_sessions(self, tmp_path, monkeypatch) -> None:  # type: ignore[no-untyped-def]
+        monkeypatch.setattr("browsectl.core.SESSIONS_DIR", tmp_path)
+        dead_file = tmp_path / "stale.json"
+        dead_file.write_text(
+            json.dumps({"host": "localhost", "port": 9222, "pid": 99999999})
+        )
+        (tmp_path / "ext.json").write_text(
+            json.dumps({"host": "localhost", "port": 9333})
+        )
+        result = list_sessions(prune=True)
+        assert "Pruned 2" in result
+        assert "stale" in result
+        assert "ext" in result
+        assert not dead_file.exists()
+
+    def test_prune_keeps_running(self, tmp_path, monkeypatch) -> None:  # type: ignore[no-untyped-def]
+        monkeypatch.setattr("browsectl.core.SESSIONS_DIR", tmp_path)
+        alive_file = tmp_path / "alive.json"
+        alive_file.write_text(
+            json.dumps({"host": "localhost", "port": 9222, "pid": os.getpid()})
+        )
+        result = list_sessions(prune=True)
+        assert alive_file.exists()
+        assert "running" in result
+
+    def test_prune_removes_corrupt(self, tmp_path, monkeypatch) -> None:  # type: ignore[no-untyped-def]
+        monkeypatch.setattr("browsectl.core.SESSIONS_DIR", tmp_path)
+        corrupt = tmp_path / "bad.json"
+        corrupt.write_text("{{not json")
+        result = list_sessions(prune=True)
+        assert not corrupt.exists()
+        assert "Pruned 1" in result
+
+    @pytest.mark.asyncio
+    async def test_dispatch_sessions_prune(self, tmp_path, monkeypatch) -> None:  # type: ignore[no-untyped-def]
+        monkeypatch.setattr("browsectl.core.SESSIONS_DIR", tmp_path)
+        (tmp_path / "old.json").write_text(
+            json.dumps({"host": "localhost", "port": 9222, "pid": 99999999})
+        )
+        gw = _make_gateway()
+        result = await dispatch(
+            gw, Command.SESSIONS, ("--prune",), session_name=""
+        )
+        assert "Pruned" in result
+
+
+class TestStopAllSessions:
+    def test_no_sessions_dir(self, tmp_path, monkeypatch) -> None:  # type: ignore[no-untyped-def]
+        monkeypatch.setattr("browsectl.core.SESSIONS_DIR", tmp_path / "missing")
+        assert stop_all_sessions() == "(no sessions to stop)"
+
+    def test_empty_dir(self, tmp_path, monkeypatch) -> None:  # type: ignore[no-untyped-def]
+        monkeypatch.setattr("browsectl.core.SESSIONS_DIR", tmp_path)
+        assert stop_all_sessions() == "(no sessions to stop)"
+
+    def test_stops_all_and_removes_files(self, tmp_path, monkeypatch) -> None:  # type: ignore[no-untyped-def]
+        monkeypatch.setattr("browsectl.core.SESSIONS_DIR", tmp_path)
+        (tmp_path / "a.json").write_text(
+            json.dumps({"host": "localhost", "port": 9222, "pid": 99999999})
+        )
+        (tmp_path / "b.json").write_text(
+            json.dumps({"host": "localhost", "port": 9333})
+        )
+        (tmp_path / "c.json").write_text("corrupt{{{")
+        result = stop_all_sessions()
+        assert "a: removed (process already dead)" in result
+        assert "b: removed (no associated process)" in result
+        assert "c: removed (corrupt file)" in result
+        assert not list(tmp_path.glob("*.json"))
+
+    @pytest.mark.asyncio
+    async def test_dispatch_stop_all(self, tmp_path, monkeypatch) -> None:  # type: ignore[no-untyped-def]
+        monkeypatch.setattr("browsectl.core.SESSIONS_DIR", tmp_path)
+        (tmp_path / "x.json").write_text(
+            json.dumps({"host": "localhost", "port": 9222, "pid": 99999999})
+        )
+        gw = _make_gateway()
+        result = await dispatch(
+            gw, Command.STOP_ALL, (), session_name=""
+        )
+        assert "x: removed" in result
+        assert not list(tmp_path.glob("*.json"))

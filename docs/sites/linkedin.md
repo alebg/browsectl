@@ -6,7 +6,7 @@
 
 - **Logged-in signal:** `document.title` contains `"Feed | LinkedIn"` on `/feed/`, or the user's name on profile pages.
 - **Logged-out signal:** Redirects to `https://www.linkedin.com/login` or shows a "Join now" page.
-- **Requirement:** browsectl-chrome must be launched with an already-authenticated Chrome profile. LinkedIn uses cookie-based auth; no programmatic login is attempted.
+- **Requirement:** `browsectl -s <name> launch` must use a profile that is already authenticated. LinkedIn uses cookie-based auth; no programmatic login is attempted.
 
 ## Navigation patterns
 

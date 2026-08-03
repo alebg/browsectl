@@ -103,16 +103,6 @@ browsectl -s agent2 goto "https://github.com"
 
 Each session gets its own Chrome process, profile directory, cookies, and localStorage. Ports are auto-assigned so agents never clash. Use `browsectl sessions` to see all active sessions, and `browsectl -s <name> stop` to shut one down. See `docs/multi-session.md` for details.
 
-## Standalone Chrome launcher
-
-The `bin/browsectl-chrome` script launches Chrome without connecting. Useful when you want to manage Chrome separately:
-
-```bash
-browsectl-chrome myprofile 9500
-```
-
-Both profile name and port are required.
-
 ## Backend selection
 
 ```bash

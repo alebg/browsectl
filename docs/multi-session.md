@@ -64,16 +64,6 @@ browsectl -s legacy connect localhost 9500
 
 Both host and port are required.
 
-## Standalone launcher
-
-The `bin/browsectl-chrome` script launches Chrome without connecting. Useful for manual setups:
-
-```bash
-browsectl-chrome myprofile 9500
-```
-
-Both profile name and port are required. Profiles are stored at `~/.browsectl/profiles/<name>/`.
-
 ## Listing sessions
 
 ```bash

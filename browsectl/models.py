@@ -62,3 +62,4 @@ class Command(StrEnum):
     SCROLL = "scroll"
     WAIT = "wait"
     CLEAR_COOKIES = "clear-cookies"
+    LAUNCH = "launch"

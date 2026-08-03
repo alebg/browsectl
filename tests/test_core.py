@@ -1,11 +1,16 @@
 """Tests for core command dispatch."""
 
 import json
-from unittest.mock import AsyncMock
+import socket
+from unittest.mock import AsyncMock, Mock
 
 import pytest
 
-from browsectl.core import dispatch
+from browsectl.core import (
+    _check_port_free,
+    _parse_launch_args,
+    dispatch,
+)
 from browsectl.gateway import BrowserGateway
 from browsectl.models import (
     Command,
@@ -14,6 +19,12 @@ from browsectl.models import (
     Screenshot,
     Tab,
 )
+
+
+def _make_launch_mock() -> Mock:
+    mock = Mock()
+    mock.return_value.pid = 12345
+    return mock
 
 
 def _make_gateway() -> BrowserGateway[str]:
@@ -35,6 +46,7 @@ def _make_gateway() -> BrowserGateway[str]:
         scroll=AsyncMock(),
         wait_for=AsyncMock(),
         clear_cookies=AsyncMock(),
+        launch_browser=_make_launch_mock(),
     )
 
 
@@ -224,3 +236,110 @@ class TestNamedSessions:
         gw.connect.assert_called_once_with(
             BrowserEndpoint(host="localhost", port=9222), "t3"
         )
+
+
+class TestParseLaunchArgs:
+    def test_port_only(self) -> None:
+        port, host = _parse_launch_args(("9222",))
+        assert port == 9222
+        assert host == "localhost"
+
+    def test_port_with_host(self) -> None:
+        port, host = _parse_launch_args(("9333", "--host", "remote.dev"))
+        assert port == 9333
+        assert host == "remote.dev"
+
+    def test_missing_port(self) -> None:
+        with pytest.raises(SystemExit, match="port"):
+            _parse_launch_args(())
+
+    def test_invalid_port(self) -> None:
+        with pytest.raises(SystemExit, match="Invalid port"):
+            _parse_launch_args(("abc",))
+
+    def test_host_without_value(self) -> None:
+        with pytest.raises(SystemExit, match="--host requires"):
+            _parse_launch_args(("9222", "--host"))
+
+
+class TestCheckPortFree:
+    def test_free_port(self) -> None:
+        sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        sock.bind(("127.0.0.1", 0))
+        _, port = sock.getsockname()
+        sock.close()
+        _check_port_free("127.0.0.1", port)
+
+    def test_port_in_use(self) -> None:
+        sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        sock.bind(("127.0.0.1", 0))
+        _, port = sock.getsockname()
+        sock.listen(1)
+        try:
+            with pytest.raises(SystemExit, match="already in use"):
+                _check_port_free("127.0.0.1", port)
+        finally:
+            sock.close()
+
+
+class TestDispatchLaunch:
+    @pytest.mark.asyncio
+    async def test_launch_saves_session(self, tmp_path, monkeypatch) -> None:  # type: ignore[no-untyped-def]
+        monkeypatch.setattr("browsectl.core.SESSIONS_DIR", tmp_path)
+        monkeypatch.setattr("browsectl.core.LAUNCH_TIMEOUT", 2.0)
+        monkeypatch.setattr("browsectl.core.LAUNCH_POLL_INTERVAL", 0.01)
+        monkeypatch.setattr(
+            "browsectl.core._check_port_free", lambda _h, _p: None
+        )
+
+        gw = _make_gateway()
+        result = await dispatch(
+            gw, Command.LAUNCH, ("9333",), session_name="agent1"
+        )
+        assert "9333" in result
+        assert "12345" in result
+
+        session_file = tmp_path / "agent1.json"
+        assert session_file.exists()
+        data = json.loads(session_file.read_text())
+        assert data["host"] == "localhost"
+        assert data["port"] == 9333
+
+        gw.launch_browser.assert_called_once_with("agent1", 9333)
+
+    @pytest.mark.asyncio
+    async def test_launch_port_in_use_fails(self, tmp_path, monkeypatch) -> None:  # type: ignore[no-untyped-def]
+        monkeypatch.setattr("browsectl.core.SESSIONS_DIR", tmp_path)
+        sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        sock.bind(("127.0.0.1", 0))
+        _, port = sock.getsockname()
+        sock.listen(1)
+        try:
+            gw = _make_gateway()
+            with pytest.raises(SystemExit, match="already in use"):
+                await dispatch(
+                    gw, Command.LAUNCH, (str(port),),
+                    session_name="blocked"
+                )
+        finally:
+            sock.close()
+
+    @pytest.mark.asyncio
+    async def test_launch_with_host_override(self, tmp_path, monkeypatch) -> None:  # type: ignore[no-untyped-def]
+        monkeypatch.setattr("browsectl.core.SESSIONS_DIR", tmp_path)
+        monkeypatch.setattr("browsectl.core.LAUNCH_TIMEOUT", 2.0)
+        monkeypatch.setattr("browsectl.core.LAUNCH_POLL_INTERVAL", 0.01)
+        monkeypatch.setattr(
+            "browsectl.core._check_port_free", lambda _h, _p: None
+        )
+
+        gw = _make_gateway()
+        result = await dispatch(
+            gw, Command.LAUNCH, ("9444", "--host", "mybox"),
+            session_name="remote1"
+        )
+        assert "mybox:9444" in result
+
+        session_file = tmp_path / "remote1.json"
+        data = json.loads(session_file.read_text())
+        assert data["host"] == "mybox"

@@ -20,4 +20,5 @@ mkdir -p "$PROFILE_DIR"
 exec google-chrome \
     --remote-debugging-port="$PORT" \
     --user-data-dir="$PROFILE_DIR" \
+    --no-first-run \
     "$@"

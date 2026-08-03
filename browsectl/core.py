@@ -1,8 +1,11 @@
 """Command orchestration -- browser-agnostic business logic."""
 
+import asyncio
 import fcntl
 import json
 import logging
+import socket
+import time
 from pathlib import Path
 
 from browsectl.gateway import BrowserGateway
@@ -12,6 +15,9 @@ logger = logging.getLogger(__name__)
 
 SESSIONS_DIR = Path.home() / ".browsectl" / "sessions"
 SCREENSHOT_PATH = Path("screenshot.png")
+DEFAULT_HOST: str = "localhost"
+LAUNCH_TIMEOUT: float = 15.0
+LAUNCH_POLL_INTERVAL: float = 0.3
 
 
 def _session_file(name: str) -> Path:
@@ -51,6 +57,73 @@ def save_session(
         f.write(json.dumps(data))
 
 
+def _check_port_free(host: str, port: int) -> None:
+    """Fail fast if the port is already in use."""
+    sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    try:
+        result = sock.connect_ex((host, port))
+        if result == 0:
+            raise SystemExit(
+                f"Port {port} is already in use on {host}.\n"
+                f"Choose a different port or stop the existing process."
+            )
+    finally:
+        sock.close()
+
+
+async def _wait_for_cdp[S](
+    gateway: BrowserGateway[S],
+    endpoint: BrowserEndpoint,
+) -> None:
+    """Poll until Chrome's CDP endpoint is reachable."""
+    deadline = time.monotonic() + LAUNCH_TIMEOUT
+    last_error: Exception | None = None
+    while time.monotonic() < deadline:
+        try:
+            session = await gateway.connect(endpoint, None)
+            await gateway.disconnect(session)
+            return
+        except Exception as exc:
+            last_error = exc
+            await asyncio.sleep(LAUNCH_POLL_INTERVAL)
+    msg = f"Chrome did not become ready within {LAUNCH_TIMEOUT}s"
+    if last_error is not None:
+        msg += f": {last_error}"
+    raise SystemExit(msg)
+
+
+def _parse_launch_args(
+    args: tuple[str, ...],
+) -> tuple[int, str]:
+    """Parse launch command args. Returns (port, host)."""
+    remaining = list(args)
+    host = DEFAULT_HOST
+    port_str: str | None = None
+
+    i = 0
+    while i < len(remaining):
+        if remaining[i] == "--host":
+            if i + 1 >= len(remaining):
+                raise SystemExit("--host requires a value")
+            host = remaining[i + 1]
+            i += 2
+        else:
+            if port_str is None:
+                port_str = remaining[i]
+            i += 1
+
+    if port_str is None:
+        raise SystemExit(
+            "Missing required argument: port\n"
+            "Usage: browsectl -s <session> launch <port> [--host <host>]"
+        )
+    try:
+        port = int(port_str)
+    except ValueError:
+        raise SystemExit(f"Invalid port: {port_str}")
+    return port, host
+
+
 async def dispatch[S](
     gateway: BrowserGateway[S],
     command: Command,
@@ -58,6 +131,19 @@ async def dispatch[S](
     session_name: str,
 ) -> str:
     """Dispatch a CLI command through the gateway. Returns output text."""
+    if command == Command.LAUNCH:
+        port, host = _parse_launch_args(args)
+        _check_port_free(host, port)
+        process = gateway.launch_browser(session_name, port)
+        endpoint = BrowserEndpoint(host=host, port=port)
+        try:
+            await _wait_for_cdp(gateway, endpoint)
+        except SystemExit:
+            process.terminate()
+            raise
+        save_session(endpoint, name=session_name)
+        return f"Launched Chrome on {host}:{port} (pid {process.pid})"
+
     if command == Command.CONNECT:
         missing: list[str] = []
         if not args:
@@ -169,5 +255,5 @@ async def _run_command[S](
             await gateway.clear_cookies(session)
             return "Cookies cleared"
 
-        case Command.CONNECT:
+        case Command.CONNECT | Command.LAUNCH:
             return ""

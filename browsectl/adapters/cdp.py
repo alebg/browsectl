@@ -3,8 +3,10 @@
 import asyncio
 import base64
 import json
+import subprocess
 import urllib.request
 from collections.abc import Awaitable, Callable
+from pathlib import Path
 
 import attrs
 import websockets.asyncio.client
@@ -19,6 +21,7 @@ from browsectl.models import (
 
 CDP_TIMEOUT: float = 30.0
 WS_MAX_SIZE: int = 16 * 1024 * 1024
+PROFILES_DIR: Path = Path.home() / ".browsectl" / "profiles"
 
 
 class CdpError(Exception):
@@ -402,3 +405,19 @@ async def wait_for(session: CdpSession, selector: str, timeout: float = 30.0) ->
         raise CdpTimeoutError(
             f"Selector {selector!r} not found after {timeout}s"
         )
+
+
+def launch_browser(profile_name: str, port: int) -> subprocess.Popen[bytes]:
+    """Start Chrome with remote debugging. Returns the background process."""
+    profile_dir = PROFILES_DIR / profile_name
+    profile_dir.mkdir(parents=True, exist_ok=True)
+    return subprocess.Popen(
+        [
+            "google-chrome",
+            f"--remote-debugging-port={port}",
+            f"--user-data-dir={profile_dir}",
+            "--no-first-run",
+        ],
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+    )

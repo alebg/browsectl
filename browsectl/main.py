@@ -18,7 +18,8 @@ Options:
                           Available: cdp
 
 Commands:
-  connect <host> <port>   Connect to browser at host:port
+  launch <port> [--host h]  Launch Chrome and connect (host default: localhost)
+  connect <host> <port>   Connect to an existing browser at host:port
   goto <url>              Navigate to URL
   screenshot [path]       Save screenshot (default: screenshot.png)
   click <selector>        Click element by CSS selector
@@ -56,6 +57,7 @@ def _build_cdp_gateway() -> BrowserGateway[cdp.CdpSession]:
         scroll=cdp.scroll,
         wait_for=cdp.wait_for,
         clear_cookies=cdp.clear_cookies,
+        launch_browser=cdp.launch_browser,
     )
 
 

@@ -65,3 +65,4 @@ class Command(StrEnum):
     LAUNCH = "launch"
     STOP = "stop"
     SESSIONS = "sessions"
+    STOP_ALL = "stop-all"

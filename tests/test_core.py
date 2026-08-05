@@ -53,6 +53,7 @@ def _make_gateway() -> BrowserGateway[str]:
         wait_for=AsyncMock(),
         clear_cookies=AsyncMock(),
         launch_browser=_make_launch_mock(),
+        configure_browser=AsyncMock(),
     )
 
 

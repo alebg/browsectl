@@ -5,6 +5,7 @@ import attrs
 from browsectl.ports import (
     TClearCookies,
     TClick,
+    TConfigureBrowser,
     TConnect,
     TDisconnect,
     TEvalJs,
@@ -42,3 +43,4 @@ class BrowserGateway[S]:
     wait_for: TWaitFor[S]
     clear_cookies: TClearCookies[S]
     launch_browser: TLaunchBrowser
+    configure_browser: TConfigureBrowser

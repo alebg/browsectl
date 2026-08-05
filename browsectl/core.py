@@ -313,6 +313,10 @@ async def dispatch[S](
             process.terminate()
             raise
         save_session(endpoint, name=session_name, pid=process.pid)
+        try:
+            await gateway.configure_browser(endpoint)
+        except Exception:
+            logger.warning("Post-launch configuration failed", exc_info=True)
         mode = "foreground" if foreground else "background"
         return f"Launched Chrome on {host}:{port} (pid {process.pid}, {mode})"
 

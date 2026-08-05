@@ -381,6 +381,20 @@ async def scroll(session: CdpSession, pixels: int) -> None:
     )
 
 
+async def resize(session: CdpSession, width: int, height: int) -> None:
+    """Set the viewport to the given dimensions via device emulation."""
+    await send_command(
+        session,
+        "Emulation.setDeviceMetricsOverride",
+        {
+            "width": width,
+            "height": height,
+            "deviceScaleFactor": 1,
+            "mobile": False,
+        },
+    )
+
+
 async def clear_cookies(session: CdpSession) -> None:
     """Clear all browser cookies for this Chrome instance."""
     await send_command(session, "Network.clearBrowserCookies", None)

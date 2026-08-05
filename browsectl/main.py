@@ -38,6 +38,7 @@ Commands:
   newtab [url]            Open a new tab (default: about:blank)
   switchtab <tab-id>      Switch to a tab by ID (from 'tabs' output)
   scroll <pixels>         Scroll page (positive=down, negative=up)
+  resize <width> <height> Set viewport dimensions (for responsive testing)
   wait <selector> [timeout]  Wait for element to appear (default: 30s)
   clear-cookies             Clear all browser cookies for this session
 """
@@ -62,6 +63,7 @@ def _build_cdp_gateway() -> BrowserGateway[cdp.CdpSession]:
         new_tab=cdp.new_tab,
         switch_tab=cdp.switch_tab,
         scroll=cdp.scroll,
+        resize=cdp.resize,
         wait_for=cdp.wait_for,
         clear_cookies=cdp.clear_cookies,
         launch_browser=cdp.launch_browser,

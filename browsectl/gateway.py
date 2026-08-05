@@ -15,6 +15,7 @@ from browsectl.ports import (
     TNavigate,
     TNewTab,
     TPageInfo,
+    TResize,
     TScreenshot,
     TScroll,
     TSwitchTab,
@@ -40,6 +41,7 @@ class BrowserGateway[S]:
     new_tab: TNewTab[S]
     switch_tab: TSwitchTab[S]
     scroll: TScroll[S]
+    resize: TResize[S]
     wait_for: TWaitFor[S]
     clear_cookies: TClearCookies[S]
     launch_browser: TLaunchBrowser

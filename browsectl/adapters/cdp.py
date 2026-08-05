@@ -410,6 +410,31 @@ async def wait_for(session: CdpSession, selector: str, timeout: float = 30.0) ->
         )
 
 
+SETTINGS_PAGE_SETTLE: float = 0.5
+
+
+async def configure_browser(endpoint: BrowserEndpoint) -> None:
+    """Post-launch setup: disable translate popup via Chrome's internal API."""
+    session = await connect(endpoint, None)
+    try:
+        await send_command(
+            session, "Page.navigate", {"url": "chrome://settings/languages"},
+        )
+        await asyncio.sleep(SETTINGS_PAGE_SETTLE)
+        await send_command(
+            session,
+            "Runtime.evaluate",
+            {
+                "expression": (
+                    "chrome.settingsPrivate.setPref("
+                    "'translate.enabled', false, function(){})"
+                ),
+            },
+        )
+    finally:
+        await disconnect(session)
+
+
 def launch_browser(
     profile_name: str, port: int, foreground: bool,
 ) -> subprocess.Popen[bytes]:
@@ -426,7 +451,10 @@ def launch_browser(
         f"--remote-debugging-port={port}",
         f"--user-data-dir={profile_dir}",
         "--no-first-run",
-        "--disable-translate",
+        # Belt-and-suspenders: configure_browser also disables via
+        # settingsPrivate API, but this flag may help on Chromium forks
+        # where settingsPrivate is unavailable.
+        "--disable-features=Translate",
     )
     if foreground or shutil.which("xvfb-run") is None:
         if not foreground:

@@ -65,6 +65,7 @@ def _build_cdp_gateway() -> BrowserGateway[cdp.CdpSession]:
         wait_for=cdp.wait_for,
         clear_cookies=cdp.clear_cookies,
         launch_browser=cdp.launch_browser,
+        configure_browser=cdp.configure_browser,
     )
 
 

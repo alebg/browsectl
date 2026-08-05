@@ -246,24 +246,28 @@ class TestNamedSessions:
 
 class TestParseLaunchArgs:
     def test_no_args_returns_none_port(self) -> None:
-        port, host, timeout = _parse_launch_args(())
+        port, host, timeout, foreground = _parse_launch_args(())
         assert port is None
         assert host == "localhost"
         assert timeout == 15.0
+        assert foreground is False
 
     def test_explicit_port(self) -> None:
-        port, host, timeout = _parse_launch_args(("9222",))
+        port, host, timeout, foreground = _parse_launch_args(("9222",))
         assert port == 9222
         assert host == "localhost"
         assert timeout == 15.0
+        assert foreground is False
 
     def test_port_with_host(self) -> None:
-        port, host, timeout = _parse_launch_args(("9333", "--host", "remote.dev"))
+        port, host, timeout, foreground = _parse_launch_args(
+            ("9333", "--host", "remote.dev")
+        )
         assert port == 9333
         assert host == "remote.dev"
 
     def test_host_only_no_port(self) -> None:
-        port, host, timeout = _parse_launch_args(("--host", "mybox"))
+        port, host, timeout, foreground = _parse_launch_args(("--host", "mybox"))
         assert port is None
         assert host == "mybox"
 
@@ -276,12 +280,12 @@ class TestParseLaunchArgs:
             _parse_launch_args(("9222", "--host"))
 
     def test_timeout_flag(self) -> None:
-        port, host, timeout = _parse_launch_args(("--timeout", "30"))
+        port, host, timeout, foreground = _parse_launch_args(("--timeout", "30"))
         assert port is None
         assert timeout == 30.0
 
     def test_timeout_with_port_and_host(self) -> None:
-        port, host, timeout = _parse_launch_args(
+        port, host, timeout, foreground = _parse_launch_args(
             ("9333", "--host", "mybox", "--timeout", "5")
         )
         assert port == 9333
@@ -295,6 +299,22 @@ class TestParseLaunchArgs:
     def test_timeout_without_value(self) -> None:
         with pytest.raises(SystemExit, match="--timeout requires"):
             _parse_launch_args(("--timeout",))
+
+    def test_foreground_flag(self) -> None:
+        port, host, timeout, foreground = _parse_launch_args(("--foreground",))
+        assert port is None
+        assert foreground is True
+
+    def test_foreground_with_port(self) -> None:
+        port, host, timeout, foreground = _parse_launch_args(
+            ("9222", "--foreground")
+        )
+        assert port == 9222
+        assert foreground is True
+
+    def test_default_is_background(self) -> None:
+        _, _, _, foreground = _parse_launch_args(("9222",))
+        assert foreground is False
 
 
 class TestCheckPortFree:
@@ -340,7 +360,7 @@ class TestDispatchLaunch:
         assert data["host"] == "localhost"
         assert data["port"] == 9333
 
-        gw.launch_browser.assert_called_once_with("agent1", 9333)
+        gw.launch_browser.assert_called_once_with("agent1", 9333, False)
 
     @pytest.mark.asyncio
     async def test_launch_auto_port(self, tmp_path, monkeypatch) -> None:  # type: ignore[no-untyped-def]
@@ -361,7 +381,7 @@ class TestDispatchLaunch:
         data = json.loads(session_file.read_text())
         assert data["port"] == 44321
 
-        gw.launch_browser.assert_called_once_with("auto1", 44321)
+        gw.launch_browser.assert_called_once_with("auto1", 44321, False)
 
     @pytest.mark.asyncio
     async def test_launch_port_in_use_fails(self, tmp_path, monkeypatch) -> None:  # type: ignore[no-untyped-def]

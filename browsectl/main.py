@@ -18,8 +18,10 @@ Options:
                           Available: cdp
 
 Commands:
-  launch [port] [--host h] [--timeout s]
+  launch [port] [--host h] [--timeout s] [--foreground]
                           Launch Chrome and connect (auto-assigns port if omitted)
+                          Default: runs in Xvfb virtual display (no visible window)
+                          --foreground: show the browser window on screen
   stop                    Stop a launched Chrome session
   stop-all                Stop all sessions and kill their processes
   sessions [--prune]      List all saved sessions (--prune removes stale ones)

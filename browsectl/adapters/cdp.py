@@ -255,6 +255,169 @@ async def click(session: CdpSession, selector: str) -> None:
         )
 
 
+async def click_text(session: CdpSession, text: str) -> None:
+    """Click the first element whose visible text matches."""
+    js = f"""
+    (() => {{
+        const target = {json.dumps(text)};
+        const walker = document.createTreeWalker(
+            document.body, NodeFilter.SHOW_ELEMENT);
+        let node;
+        while ((node = walker.nextNode())) {{
+            const t = node.textContent?.trim();
+            if (t === target || node.innerText?.trim() === target) {{
+                node.scrollIntoView({{block: 'center'}});
+                const rect = node.getBoundingClientRect();
+                return JSON.stringify({{
+                    x: rect.x + rect.width / 2,
+                    y: rect.y + rect.height / 2
+                }});
+            }}
+        }}
+        throw new Error("No element with text: " + target);
+    }})()
+    """
+    result = await send_command(
+        session,
+        "Runtime.evaluate",
+        {"expression": js, "returnByValue": True},
+    )
+    if "exceptionDetails" in result:
+        desc = result.get("exceptionDetails")
+        if isinstance(desc, dict):
+            exc = desc.get("exception")
+            if isinstance(exc, dict):
+                raise CdpError(str(exc.get("description", "click_text failed")))
+        raise CdpError("click_text failed")
+
+    raw_result = result.get("result")
+    if not isinstance(raw_result, dict):
+        raise CdpError("click_text: unexpected response structure")
+    value_str = raw_result.get("value")
+    if not isinstance(value_str, str):
+        raise CdpError("click_text: missing coordinate data")
+    coords = json.loads(value_str)
+    x = float(coords.get("x", 0))
+    y = float(coords.get("y", 0))
+
+    for event_type in ("mousePressed", "mouseReleased"):
+        await send_command(
+            session,
+            "Input.dispatchMouseEvent",
+            {
+                "type": event_type,
+                "x": x,
+                "y": y,
+                "button": "left",
+                "clickCount": 1,
+            },
+        )
+
+
+async def hover(session: CdpSession, selector: str) -> None:
+    """Move the mouse over an element identified by CSS selector."""
+    js = f"""
+    (() => {{
+        const el = document.querySelector({json.dumps(selector)});
+        if (!el) throw new Error("Element not found: " + {json.dumps(selector)});
+        el.scrollIntoView({{block: 'center'}});
+        const rect = el.getBoundingClientRect();
+        return JSON.stringify({{
+            x: rect.x + rect.width / 2,
+            y: rect.y + rect.height / 2
+        }});
+    }})()
+    """
+    result = await send_command(
+        session,
+        "Runtime.evaluate",
+        {"expression": js, "returnByValue": True},
+    )
+    if "exceptionDetails" in result:
+        desc = result.get("exceptionDetails")
+        if isinstance(desc, dict):
+            exc = desc.get("exception")
+            if isinstance(exc, dict):
+                raise CdpError(str(exc.get("description", "hover failed")))
+        raise CdpError("hover failed")
+
+    raw_result = result.get("result")
+    if not isinstance(raw_result, dict):
+        raise CdpError("hover: unexpected response structure")
+    value_str = raw_result.get("value")
+    if not isinstance(value_str, str):
+        raise CdpError("hover: missing coordinate data")
+    coords = json.loads(value_str)
+    x = float(coords.get("x", 0))
+    y = float(coords.get("y", 0))
+
+    await send_command(
+        session,
+        "Input.dispatchMouseEvent",
+        {
+            "type": "mouseMoved",
+            "x": x,
+            "y": y,
+        },
+    )
+
+
+async def drag(
+    session: CdpSession,
+    from_x: float, from_y: float,
+    to_x: float, to_y: float,
+) -> None:
+    """Drag from one viewport coordinate to another."""
+    await send_command(
+        session,
+        "Input.dispatchMouseEvent",
+        {
+            "type": "mousePressed",
+            "x": from_x,
+            "y": from_y,
+            "button": "left",
+            "clickCount": 1,
+        },
+    )
+    await send_command(
+        session,
+        "Input.dispatchMouseEvent",
+        {
+            "type": "mouseMoved",
+            "x": to_x,
+            "y": to_y,
+            "button": "left",
+        },
+    )
+    await send_command(
+        session,
+        "Input.dispatchMouseEvent",
+        {
+            "type": "mouseReleased",
+            "x": to_x,
+            "y": to_y,
+            "button": "left",
+            "clickCount": 1,
+        },
+    )
+
+
+async def click_xy(session: CdpSession, x: float, y: float) -> None:
+    """Click at absolute viewport coordinates."""
+    for event_type in ("mousePressed", "mouseReleased"):
+        await send_command(
+            session,
+            "Input.dispatchMouseEvent",
+            {
+                "type": event_type,
+                "x": x,
+                "y": y,
+                "button": "left",
+                "clickCount": 1,
+            },
+        )
+
+
 async def type_text(session: CdpSession, selector: str, text: str) -> None:
     """Focus an element and type text into it."""
     focus_js = f"""

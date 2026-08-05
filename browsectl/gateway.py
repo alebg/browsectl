@@ -5,11 +5,15 @@ import attrs
 from browsectl.ports import (
     TClearCookies,
     TClick,
+    TClickText,
+    TClickXy,
     TConfigureBrowser,
     TConnect,
     TDisconnect,
+    TDrag,
     TEvalJs,
     TExtractHtml,
+    THover,
     TLaunchBrowser,
     TListTabs,
     TNavigate,
@@ -33,6 +37,10 @@ class BrowserGateway[S]:
     navigate: TNavigate[S]
     screenshot: TScreenshot[S]
     click: TClick[S]
+    click_xy: TClickXy[S]
+    hover: THover[S]
+    click_text: TClickText[S]
+    drag: TDrag[S]
     type_text: TTypeText[S]
     extract_html: TExtractHtml[S]
     eval_js: TEvalJs[S]

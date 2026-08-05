@@ -40,6 +40,10 @@ def _make_gateway() -> BrowserGateway[str]:
         navigate=AsyncMock(return_value=PageInfo(url="http://x.com", title="X")),
         screenshot=AsyncMock(return_value=Screenshot(data=b"png", format="png")),
         click=AsyncMock(),
+        click_xy=AsyncMock(),
+        hover=AsyncMock(),
+        click_text=AsyncMock(),
+        drag=AsyncMock(),
         type_text=AsyncMock(),
         extract_html=AsyncMock(return_value="<b>hi</b>"),
         eval_js=AsyncMock(return_value=EvalResult(value="42")),
@@ -125,6 +129,102 @@ class TestDispatchCommands:
             gw, Command.CLICK, ("#btn",), session_name=self.SESSION_NAME
         )
         assert "#btn" in result
+
+    @pytest.mark.asyncio
+    async def test_drag(self) -> None:
+        gw = _make_gateway()
+        result = await dispatch(
+            gw, Command.DRAG, ("10", "20", "100", "200"),
+            session_name=self.SESSION_NAME,
+        )
+        assert "10" in result and "200" in result
+        gw.drag.assert_called_once_with(
+            "session", 10.0, 20.0, 100.0, 200.0,
+        )
+
+    @pytest.mark.asyncio
+    async def test_drag_missing_args(self) -> None:
+        gw = _make_gateway()
+        with pytest.raises(SystemExit, match="Usage"):
+            await dispatch(
+                gw, Command.DRAG, ("10", "20"),
+                session_name=self.SESSION_NAME,
+            )
+
+    @pytest.mark.asyncio
+    async def test_drag_invalid_coords(self) -> None:
+        gw = _make_gateway()
+        with pytest.raises(SystemExit, match="Invalid coordinates"):
+            await dispatch(
+                gw, Command.DRAG, ("a", "b", "c", "d"),
+                session_name=self.SESSION_NAME,
+            )
+
+    @pytest.mark.asyncio
+    async def test_click_text(self) -> None:
+        gw = _make_gateway()
+        result = await dispatch(
+            gw, Command.CLICK_TEXT, ("Sign in",),
+            session_name=self.SESSION_NAME,
+        )
+        assert "Sign in" in result
+        gw.click_text.assert_called_once_with("session", "Sign in")
+
+    @pytest.mark.asyncio
+    async def test_click_text_missing_args(self) -> None:
+        gw = _make_gateway()
+        with pytest.raises(SystemExit, match="Usage"):
+            await dispatch(
+                gw, Command.CLICK_TEXT, (),
+                session_name=self.SESSION_NAME,
+            )
+
+    @pytest.mark.asyncio
+    async def test_hover(self) -> None:
+        gw = _make_gateway()
+        result = await dispatch(
+            gw, Command.HOVER, ("#menu",),
+            session_name=self.SESSION_NAME,
+        )
+        assert "#menu" in result
+        gw.hover.assert_called_once_with("session", "#menu")
+
+    @pytest.mark.asyncio
+    async def test_hover_missing_args(self) -> None:
+        gw = _make_gateway()
+        with pytest.raises(SystemExit, match="Usage"):
+            await dispatch(
+                gw, Command.HOVER, (),
+                session_name=self.SESSION_NAME,
+            )
+
+    @pytest.mark.asyncio
+    async def test_click_xy(self) -> None:
+        gw = _make_gateway()
+        result = await dispatch(
+            gw, Command.CLICK_XY, ("100.5", "200"),
+            session_name=self.SESSION_NAME,
+        )
+        assert "100.5" in result
+        gw.click_xy.assert_called_once_with("session", 100.5, 200.0)
+
+    @pytest.mark.asyncio
+    async def test_click_xy_missing_args(self) -> None:
+        gw = _make_gateway()
+        with pytest.raises(SystemExit, match="Usage"):
+            await dispatch(
+                gw, Command.CLICK_XY, ("100",),
+                session_name=self.SESSION_NAME,
+            )
+
+    @pytest.mark.asyncio
+    async def test_click_xy_invalid_coords(self) -> None:
+        gw = _make_gateway()
+        with pytest.raises(SystemExit, match="Invalid coordinates"):
+            await dispatch(
+                gw, Command.CLICK_XY, ("x", "y"),
+                session_name=self.SESSION_NAME,
+            )
 
     @pytest.mark.asyncio
     async def test_type(self) -> None:

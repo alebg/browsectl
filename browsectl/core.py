@@ -390,6 +390,49 @@ async def _run_command[S](
             await gateway.click(session, args[0])
             return f"Clicked: {args[0]}"
 
+        case Command.DRAG:
+            if len(args) < 4:
+                raise SystemExit(
+                    "Usage: browsectl drag <from_x> <from_y> <to_x> <to_y>"
+                )
+            try:
+                fx, fy = float(args[0]), float(args[1])
+                tx, ty = float(args[2]), float(args[3])
+            except ValueError:
+                raise SystemExit(
+                    f"Invalid coordinates: {' '.join(args[:4])}"
+                )
+            await gateway.drag(session, fx, fy, tx, ty)
+            return f"Dragged ({fx}, {fy}) -> ({tx}, {ty})"
+
+        case Command.CLICK_TEXT:
+            if not args:
+                raise SystemExit(
+                    "Usage: browsectl click-text <text>"
+                )
+            await gateway.click_text(session, args[0])
+            return f"Clicked text: {args[0]}"
+
+        case Command.HOVER:
+            if not args:
+                raise SystemExit("Usage: browsectl hover <selector>")
+            await gateway.hover(session, args[0])
+            return f"Hovered: {args[0]}"
+
+        case Command.CLICK_XY:
+            if len(args) < 2:
+                raise SystemExit(
+                    "Usage: browsectl click-xy <x> <y>"
+                )
+            try:
+                x, y = float(args[0]), float(args[1])
+            except ValueError:
+                raise SystemExit(
+                    f"Invalid coordinates: {args[0]} {args[1]}"
+                )
+            await gateway.click_xy(session, x, y)
+            return f"Clicked at ({x}, {y})"
+
         case Command.TYPE:
             if len(args) < 2:
                 raise SystemExit("Usage: browsectl type <selector> <text>")

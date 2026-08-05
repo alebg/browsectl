@@ -73,3 +73,7 @@ class Command(StrEnum):
     STOP_ALL = "stop-all"
     PROFILES = "profiles"
     RESIZE = "resize"
+    CLICK_XY = "click-xy"
+    HOVER = "hover"
+    CLICK_TEXT = "click-text"
+    DRAG = "drag"

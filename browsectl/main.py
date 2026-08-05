@@ -30,6 +30,10 @@ Commands:
   goto <url>              Navigate to URL
   screenshot [path]       Save screenshot (default: screenshot.png)
   click <selector>        Click element by CSS selector
+  click-xy <x> <y>       Click at viewport coordinates
+  click-text <text>      Click first element matching visible text
+  drag <x1> <y1> <x2> <y2>  Drag from (x1,y1) to (x2,y2)
+  hover <selector>       Move mouse over element (triggers :hover CSS, tooltips)
   type <selector> <text>  Type text into element
   html <selector>         Extract innerHTML of element
   eval <expression>       Evaluate JavaScript expression
@@ -55,6 +59,10 @@ def _build_cdp_gateway() -> BrowserGateway[cdp.CdpSession]:
         navigate=cdp.navigate,
         screenshot=cdp.screenshot,
         click=cdp.click,
+        click_xy=cdp.click_xy,
+        hover=cdp.hover,
+        click_text=cdp.click_text,
+        drag=cdp.drag,
         type_text=cdp.type_text,
         extract_html=cdp.extract_html,
         eval_js=cdp.eval_js,

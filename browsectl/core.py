@@ -441,6 +441,20 @@ async def _run_command[S](
             await gateway.wait_for(session, args[0], timeout)
             return f"Found: {args[0]}"
 
+        case Command.RESIZE:
+            if len(args) < 2:
+                raise SystemExit(
+                    "Usage: browsectl resize <width> <height>"
+                )
+            try:
+                width, height = int(args[0]), int(args[1])
+            except ValueError:
+                raise SystemExit(
+                    f"Invalid dimensions: {args[0]} {args[1]}"
+                )
+            await gateway.resize(session, width, height)
+            return f"Viewport set to {width}x{height}"
+
         case Command.CLEAR_COOKIES:
             await gateway.clear_cookies(session)
             return "Cookies cleared"

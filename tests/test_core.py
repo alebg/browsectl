@@ -50,6 +50,7 @@ def _make_gateway() -> BrowserGateway[str]:
         new_tab=AsyncMock(return_value=Tab(id="t2", title="", url="about:blank")),
         switch_tab=AsyncMock(),
         scroll=AsyncMock(),
+        resize=AsyncMock(),
         wait_for=AsyncMock(),
         clear_cookies=AsyncMock(),
         launch_browser=_make_launch_mock(),
@@ -183,6 +184,31 @@ class TestDispatchCommands:
         )
         assert "#target" in result
         gw.wait_for.assert_called_once_with("session", "#target", 5.0)
+
+    @pytest.mark.asyncio
+    async def test_resize(self) -> None:
+        gw = _make_gateway()
+        result = await dispatch(
+            gw, Command.RESIZE, ("375", "667"), session_name=self.SESSION_NAME
+        )
+        assert "375x667" in result
+        gw.resize.assert_called_once_with("session", 375, 667)
+
+    @pytest.mark.asyncio
+    async def test_resize_missing_args(self) -> None:
+        gw = _make_gateway()
+        with pytest.raises(SystemExit, match="Usage"):
+            await dispatch(
+                gw, Command.RESIZE, ("375",), session_name=self.SESSION_NAME
+            )
+
+    @pytest.mark.asyncio
+    async def test_resize_invalid_dimensions(self) -> None:
+        gw = _make_gateway()
+        with pytest.raises(SystemExit, match="Invalid dimensions"):
+            await dispatch(
+                gw, Command.RESIZE, ("abc", "def"), session_name=self.SESSION_NAME
+            )
 
     @pytest.mark.asyncio
     async def test_clear_cookies(self) -> None:

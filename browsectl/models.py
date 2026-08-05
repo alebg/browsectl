@@ -72,3 +72,4 @@ class Command(StrEnum):
     SESSIONS = "sessions"
     STOP_ALL = "stop-all"
     PROFILES = "profiles"
+    RESIZE = "resize"

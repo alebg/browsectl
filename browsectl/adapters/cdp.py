@@ -3,6 +3,8 @@
 import asyncio
 import base64
 import json
+import logging
+import shutil
 import subprocess
 import urllib.request
 from collections.abc import Awaitable, Callable
@@ -18,6 +20,8 @@ from browsectl.models import (
     Screenshot,
     Tab,
 )
+
+logger = logging.getLogger(__name__)
 
 CDP_TIMEOUT: float = 30.0
 WS_MAX_SIZE: int = 16 * 1024 * 1024
@@ -406,17 +410,40 @@ async def wait_for(session: CdpSession, selector: str, timeout: float = 30.0) ->
         )
 
 
-def launch_browser(profile_name: str, port: int) -> subprocess.Popen[bytes]:
-    """Start Chrome with remote debugging. Returns the background process."""
+def launch_browser(
+    profile_name: str, port: int, foreground: bool,
+) -> subprocess.Popen[bytes]:
+    """Start Chrome with remote debugging. Returns the background process.
+
+    When foreground is False, wraps Chrome in xvfb-run so it renders on a
+    virtual display without stealing window focus. Falls back to foreground
+    mode if xvfb-run is not installed.
+    """
     profile_dir = PROFILES_DIR / profile_name
     profile_dir.mkdir(parents=True, exist_ok=True)
+    chrome_args: tuple[str, ...] = (
+        "google-chrome",
+        f"--remote-debugging-port={port}",
+        f"--user-data-dir={profile_dir}",
+        "--no-first-run",
+        "--disable-translate",
+    )
+    if foreground or shutil.which("xvfb-run") is None:
+        if not foreground:
+            logger.warning(
+                "xvfb-run not found; launching in foreground. "
+                "Install xvfb for background mode: apt install xvfb"
+            )
+        cmd = chrome_args
+    else:
+        cmd = (
+            "xvfb-run",
+            "--auto-servernum",
+            "--server-args=-screen 0 1920x1080x24",
+            *chrome_args,
+        )
     return subprocess.Popen(
-        [
-            "google-chrome",
-            f"--remote-debugging-port={port}",
-            f"--user-data-dir={profile_dir}",
-            "--no-first-run",
-        ],
+        cmd,
         stdout=subprocess.DEVNULL,
         stderr=subprocess.DEVNULL,
     )

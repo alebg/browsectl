@@ -251,11 +251,12 @@ async def _wait_for_cdp[S](
 
 def _parse_launch_args(
     args: tuple[str, ...],
-) -> tuple[int | None, str, float]:
-    """Parse launch command args. Returns (port_or_none, host, timeout)."""
+) -> tuple[int | None, str, float, bool]:
+    """Parse launch command args. Returns (port_or_none, host, timeout, foreground)."""
     remaining = list(args)
     host = DEFAULT_HOST
     timeout = LAUNCH_TIMEOUT
+    foreground = False
     port_str: str | None = None
 
     i = 0
@@ -273,18 +274,21 @@ def _parse_launch_args(
             except ValueError:
                 raise SystemExit(f"Invalid timeout: {remaining[i + 1]}")
             i += 2
+        elif remaining[i] == "--foreground":
+            foreground = True
+            i += 1
         else:
             if port_str is None:
                 port_str = remaining[i]
             i += 1
 
     if port_str is None:
-        return None, host, timeout
+        return None, host, timeout, foreground
     try:
         port = int(port_str)
     except ValueError:
         raise SystemExit(f"Invalid port: {port_str}")
-    return port, host, timeout
+    return port, host, timeout, foreground
 
 
 async def dispatch[S](
@@ -295,13 +299,13 @@ async def dispatch[S](
 ) -> str:
     """Dispatch a CLI command through the gateway. Returns output text."""
     if command == Command.LAUNCH:
-        requested_port, host, timeout = _parse_launch_args(args)
+        requested_port, host, timeout, foreground = _parse_launch_args(args)
         if requested_port is not None:
             _check_port_free(host, requested_port)
             port = requested_port
         else:
             port = _find_free_port(host)
-        process = gateway.launch_browser(session_name, port)
+        process = gateway.launch_browser(session_name, port, foreground)
         endpoint = BrowserEndpoint(host=host, port=port)
         try:
             await _wait_for_cdp(gateway, endpoint, timeout)
@@ -309,7 +313,8 @@ async def dispatch[S](
             process.terminate()
             raise
         save_session(endpoint, name=session_name, pid=process.pid)
-        return f"Launched Chrome on {host}:{port} (pid {process.pid})"
+        mode = "foreground" if foreground else "background"
+        return f"Launched Chrome on {host}:{port} (pid {process.pid}, {mode})"
 
     if command == Command.STOP:
         return stop_session(session_name)

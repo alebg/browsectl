@@ -1,6 +1,6 @@
 [project]
 name = "browsectl"
-version = "0.2.2"
+version = "0.2.3"
 description = "Browser-agnostic automation for AI agents"
 readme = "README.md"
 authors = [

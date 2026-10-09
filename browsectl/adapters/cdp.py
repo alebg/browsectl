@@ -14,6 +14,7 @@ import websockets.asyncio.client
 
 from browsectl.models import (
     PROFILES_DIR,
+    WM_CLASS_PREFIX,
     BrowserEndpoint,
     EvalResult,
     PageInfo,
@@ -494,11 +495,15 @@ async def eval_js(session: CdpSession, expression: str) -> EvalResult:
 
 
 async def new_tab(session: CdpSession, url: str) -> Tab:
-    """Create a new tab and return its info."""
+    """Create a new tab in the background and return its info.
+
+    background=True keeps Chrome from activating the tab, which on X11
+    would raise its window and steal desktop focus.
+    """
     result = await send_command(
         session,
         "Target.createTarget",
-        {"url": url},
+        {"url": url, "background": True},
     )
     target_id = result.get("targetId", "")
     if not isinstance(target_id, str) or not target_id:
@@ -627,6 +632,9 @@ def launch_browser(
         "google-chrome",
         f"--remote-debugging-port={port}",
         f"--user-data-dir={profile_dir}",
+        # Gives the window a predictable WM_CLASS so desktop rules can match
+        # it (see adapters/desktop.py).
+        f"--class={WM_CLASS_PREFIX}{profile_name}",
         "--no-first-run",
         # Belt-and-suspenders: configure_browser also disables via
         # settingsPrivate API, but this flag may help on Chromium forks
@@ -647,8 +655,11 @@ def launch_browser(
             "--server-args=-screen 0 1920x1080x24",
             *chrome_args,
         )
+    # Own process group, so stop can signal the xvfb-run wrapper, Chrome and
+    # Xvfb together instead of orphaning the latter two.
     return subprocess.Popen(
         cmd,
         stdout=subprocess.DEVNULL,
         stderr=subprocess.DEVNULL,
+        start_new_session=True,
     )

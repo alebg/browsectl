@@ -9,6 +9,10 @@ BROWSECTL_DIR = Path.home() / ".browsectl"
 SESSIONS_DIR = BROWSECTL_DIR / "sessions"
 PROFILES_DIR = BROWSECTL_DIR / "profiles"
 
+# Chrome windows are launched with --class=<prefix><session> so a window
+# manager rule can match every browsectl window and deny it focus.
+WM_CLASS_PREFIX = "browsectl-"
+
 
 @attrs.define(frozen=True, slots=True)
 class BrowserEndpoint:

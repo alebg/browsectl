@@ -2,7 +2,8 @@
 
 import asyncio
 import json
-from unittest.mock import AsyncMock, patch
+from pathlib import Path
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
@@ -12,6 +13,7 @@ from browsectl.adapters.cdp import (
     CdpTimeoutError,
     connect,
     disconnect,
+    launch_browser,
     list_tabs,
     page_info,
     send_command,
@@ -298,3 +300,26 @@ class TestDisconnect:
         session = _make_session()
         await disconnect(session)
         session.ws.close.assert_called_once()
+
+
+class TestLaunchBrowser:
+    @pytest.mark.parametrize("foreground", [True, False])
+    def test_class_flag_and_own_process_group(
+        self, foreground: bool, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setattr("browsectl.adapters.cdp.PROFILES_DIR", tmp_path)
+        popen = MagicMock()
+        with (
+            patch("browsectl.adapters.cdp.subprocess.Popen", popen),
+            patch(
+                "browsectl.adapters.cdp.shutil.which",
+                MagicMock(return_value="/usr/bin/xvfb-run"),
+            ),
+        ):
+            launch_browser("agent1", 9333, foreground)
+        popen.assert_called_once()
+        cmd = popen.call_args.args[0]
+        assert "--class=browsectl-agent1" in cmd
+        assert "--remote-debugging-port=9333" in cmd
+        assert ("xvfb-run" in cmd) is (not foreground)
+        assert popen.call_args.kwargs["start_new_session"] is True

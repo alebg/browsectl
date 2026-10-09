@@ -41,6 +41,15 @@ def load_session(name: str) -> tuple[BrowserEndpoint, str | None]:
     )
 
 
+def _session_pid(name: str) -> int | None:
+    """Return the browser pid recorded for a session, if any."""
+    path = _session_file(name)
+    if not path.exists():
+        return None
+    pid = json.loads(path.read_text()).get("pid")
+    return pid if isinstance(pid, int) else None
+
+
 def save_session(
     endpoint: BrowserEndpoint,
     target_id: str | None = None,
@@ -61,6 +70,24 @@ def save_session(
         f.write(json.dumps(data))
 
 
+def _terminate_process_tree(pid: int) -> bool:
+    """SIGTERM a launched browser and everything it spawned.
+
+    Launched browsers lead their own process group, so signalling the group
+    also reaches Chrome and Xvfb behind an xvfb-run wrapper. Sessions saved
+    before that change hold a non-leader pid; those get a plain kill.
+    Returns False if the process was already gone.
+    """
+    try:
+        if os.getpgid(pid) == pid:
+            os.killpg(pid, signal.SIGTERM)
+        else:
+            os.kill(pid, signal.SIGTERM)
+    except ProcessLookupError:
+        return False
+    return True
+
+
 def stop_session(name: str) -> str:
     """Stop a launched Chrome session by killing its process."""
     path = _session_file(name)
@@ -71,10 +98,7 @@ def stop_session(name: str) -> str:
     if not isinstance(pid, int):
         path.unlink()
         return f"Session '{name}' removed (no associated process)."
-    try:
-        os.kill(pid, signal.SIGTERM)
-    except ProcessLookupError:
-        pass
+    _terminate_process_tree(pid)
     path.unlink()
     return f"Stopped session '{name}' (pid {pid})."
 
@@ -149,10 +173,9 @@ def stop_all_sessions() -> str:
             continue
         pid = data.get("pid")
         if isinstance(pid, int):
-            try:
-                os.kill(pid, signal.SIGTERM)
+            if _terminate_process_tree(pid):
                 results.append(f"{name}: stopped (pid {pid})")
-            except ProcessLookupError:
+            else:
                 results.append(f"{name}: removed (process already dead)")
         else:
             results.append(f"{name}: removed (no associated process)")
@@ -310,7 +333,7 @@ async def dispatch[S](
         try:
             await _wait_for_cdp(gateway, endpoint, timeout)
         except SystemExit:
-            process.terminate()
+            _terminate_process_tree(process.pid)
             raise
         save_session(endpoint, name=session_name, pid=process.pid)
         try:
@@ -358,7 +381,13 @@ async def dispatch[S](
     try:
         result = await _run_command(gateway, session, command, args)
         if command == Command.SWITCHTAB and args:
-            save_session(endpoint, target_id=args[0], name=session_name)
+            # Keep the pid, or a later `stop` would orphan the browser.
+            save_session(
+                endpoint,
+                target_id=args[0],
+                name=session_name,
+                pid=_session_pid(session_name),
+            )
         return result
     finally:
         await gateway.disconnect(session)

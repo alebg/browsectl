@@ -2,15 +2,17 @@
 
 import json
 import os
+import signal
 import socket
 from pathlib import Path
-from unittest.mock import AsyncMock, Mock
+from unittest.mock import AsyncMock, MagicMock, Mock, patch
 
 import pytest
 
 from browsectl.core import (
     _check_port_free,
     _parse_launch_args,
+    _terminate_process_tree,
     dispatch,
     list_profiles,
     list_sessions,
@@ -331,6 +333,23 @@ class TestDispatchCommands:
         data = json.loads(session_file.read_text())
         assert data["target_id"] == "t2"
 
+    @pytest.mark.asyncio
+    async def test_switchtab_keeps_pid(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Losing the pid here made a later `stop` orphan the browser."""
+        session_file = tmp_path / f"{self.SESSION_NAME}.json"
+        session_file.write_text(
+            json.dumps({"host": "localhost", "port": 9222, "pid": 4242})
+        )
+        monkeypatch.setattr("browsectl.core.SESSIONS_DIR", tmp_path)
+        gw = _make_gateway()
+        await dispatch(
+            gw, Command.SWITCHTAB, ("t2",), session_name=self.SESSION_NAME
+        )
+        data = json.loads(session_file.read_text())
+        assert data["pid"] == 4242
+
 
 class TestNamedSessions:
     @pytest.mark.asyncio
@@ -564,6 +583,58 @@ class TestDispatchLaunch:
         session_file = tmp_path / "pidtest.json"
         data = json.loads(session_file.read_text())
         assert data["pid"] == 12345
+
+    @pytest.mark.asyncio
+    async def test_launch_failure_terminates_process_tree(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setattr("browsectl.core.SESSIONS_DIR", tmp_path)
+        monkeypatch.setattr(
+            "browsectl.core._check_port_free", lambda _h, _p: None
+        )
+        monkeypatch.setattr(
+            "browsectl.core._wait_for_cdp",
+            AsyncMock(side_effect=SystemExit("not ready")),
+        )
+        terminate = MagicMock()
+        monkeypatch.setattr("browsectl.core._terminate_process_tree", terminate)
+
+        gw = _make_gateway()
+        with pytest.raises(SystemExit, match="not ready"):
+            await dispatch(
+                gw, Command.LAUNCH, ("9333",), session_name="failed"
+            )
+
+        terminate.assert_called_once_with(12345)
+        assert not (tmp_path / "failed.json").exists()
+
+
+class TestTerminateProcessTree:
+    def test_group_leader_gets_group_signal(self) -> None:
+        with (
+            patch("browsectl.core.os.getpgid", MagicMock(return_value=123)),
+            patch("browsectl.core.os.killpg") as killpg,
+            patch("browsectl.core.os.kill") as kill,
+        ):
+            assert _terminate_process_tree(123) is True
+        killpg.assert_called_once_with(123, signal.SIGTERM)
+        kill.assert_not_called()
+
+    def test_non_leader_falls_back_to_single_kill(self) -> None:
+        with (
+            patch("browsectl.core.os.getpgid", MagicMock(return_value=1)),
+            patch("browsectl.core.os.killpg") as killpg,
+            patch("browsectl.core.os.kill") as kill,
+        ):
+            assert _terminate_process_tree(123) is True
+        kill.assert_called_once_with(123, signal.SIGTERM)
+        killpg.assert_not_called()
+
+    def test_dead_process_returns_false(self) -> None:
+        with patch(
+            "browsectl.core.os.getpgid", MagicMock(side_effect=ProcessLookupError)
+        ):
+            assert _terminate_process_tree(123) is False
 
 
 class TestStopSession:

@@ -36,6 +36,18 @@ class TestNewTab:
         assert tab == Tab(id="t-new", title="", url="https://example.com")
 
     @pytest.mark.asyncio
+    async def test_creates_tab_in_background(self) -> None:
+        session = _make_session()
+        mock = AsyncMock(side_effect=[{"targetId": "t-new"}])
+        with patch("browsectl.adapters.cdp.send_command", mock):
+            await new_tab(session, "https://example.com")
+        mock.assert_called_once_with(
+            session,
+            "Target.createTarget",
+            {"url": "https://example.com", "background": True},
+        )
+
+    @pytest.mark.asyncio
     async def test_raises_on_empty_id(self) -> None:
         session = _make_session()
         with _mock_send([{"targetId": ""}]):

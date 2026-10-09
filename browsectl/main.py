@@ -1,10 +1,11 @@
 """CLI entry point and wiring."""
 
 import asyncio
+import subprocess
 import sys
 from enum import StrEnum
 
-from browsectl.adapters import cdp
+from browsectl.adapters import cdp, desktop
 from browsectl.core import dispatch
 from browsectl.gateway import BrowserGateway
 from browsectl.models import Command
@@ -52,6 +53,15 @@ class Backend(StrEnum):
     CDP = "cdp"
 
 
+def _launch_cdp_browser(
+    profile_name: str, port: int, foreground: bool,
+) -> subprocess.Popen[bytes]:
+    """Launch Chrome, first making sure its window cannot steal focus."""
+    if foreground:
+        desktop.ensure_no_focus_rule()
+    return cdp.launch_browser(profile_name, port, foreground)
+
+
 def _build_cdp_gateway() -> BrowserGateway[cdp.CdpSession]:
     return BrowserGateway(
         connect=cdp.connect,
@@ -74,7 +84,7 @@ def _build_cdp_gateway() -> BrowserGateway[cdp.CdpSession]:
         resize=cdp.resize,
         wait_for=cdp.wait_for,
         clear_cookies=cdp.clear_cookies,
-        launch_browser=cdp.launch_browser,
+        launch_browser=_launch_cdp_browser,
         configure_browser=cdp.configure_browser,
     )
 

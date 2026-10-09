@@ -86,7 +86,31 @@ browsectl -s <session> stop      # stop one session
 browsectl stop-all               # stop all sessions at once
 ```
 
-Sends SIGTERM to the Chrome process and removes the session file. Other sessions are unaffected.
+Sends SIGTERM to the session's whole process group (the Chrome process, its helpers, and the Xvfb server in the default mode) and removes the session file. Other sessions are unaffected.
+
+Each browser is launched in its own process group, which is what makes this possible. Sessions saved by older versions hold a plain Chrome or `xvfb-run` pid instead; for those, `stop` kills only that one pid, so Xvfb-mode sessions from before this change can leave Chrome and Xvfb running. Relaunch them to get the new behavior.
+
+The session's pid is preserved across `switchtab`. Before this was fixed, `switchtab` dropped the pid from the session file and a later `stop` removed the file without killing Chrome.
+
+## Window focus with `--foreground`
+
+By default each Chrome runs inside Xvfb, so no window ever appears on your desktop. With `--foreground` the window is shown, and a window manager will normally give a newly mapped window keyboard focus. With several agents working in parallel that is disruptive, so browsectl is designed so that no command takes focus from the window you are using.
+
+What enforces this:
+
+- **Window class.** Chrome is launched with `--class=browsectl-<session>`, so every browsectl window has a predictable `WM_CLASS`.
+- **KWin rule (KDE on X11).** On the first `launch --foreground`, browsectl adds a rule named `browsectl-no-focus` to `~/.config/kwinrulesrc` and asks KWin to reload. The rule matches the regex `^browsectl-.*` and forces focus stealing prevention to its strictest level (4), which overrides the global setting even if it is switched off. It is installed once; later launches find it and do nothing. You can see or remove it under System Settings, Window Management, Window Rules.
+- **Background tabs.** `newtab` creates tabs with `background: true`, so Chrome does not activate them.
+
+Verified on KDE Plasma 5.27 / X11 with focus stealing prevention set to 0 globally: with the rule, launching Chrome and then running goto, click, hover, click-xy, click-text, type, drag, scroll, resize, screenshot, eval, info, html, newtab, tabs, switchtab and clear-cookies never made a browsectl window the active window. Without the rule, a launched Chrome took focus. You can still click a browsectl window and type in it normally.
+
+Limits:
+
+- Only KDE with `kreadconfig5`, `kwriteconfig5` and `qdbus` is handled. On any other desktop, `launch --foreground` logs a warning and the window may take focus. Use the default Xvfb mode there.
+- Sessions launched before this change have no class, so the rule cannot match them. Stop and relaunch them.
+- Not tested: two sessions making their very first `--foreground` launch at the same instant (both would try to install the rule), and Wayland sessions.
+
+To re-check after a change, `scripts/focus_audit.sh` runs every command against a foreground session and reports any that make a browsectl window active. Leave your desktop alone while it runs (about a minute), because it needs a window to pop up. `scripts/focus_probe.sh <class>` tests a single launch with a given window class, and `scripts/stop_probe.sh` checks that `stop` leaves no processes behind.
 
 ## Launch timeout
 
